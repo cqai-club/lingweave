@@ -34,7 +34,26 @@ export function getMentionResourceNodes(nodeId: string, nodes: CanvasNodeData[],
 }
 
 export function getGenerationResourceNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {
-    return getContextResourceNodes(nodeId, nodes, connections);
+    return connections
+        .filter((connection) => connection.toNodeId === nodeId)
+        .map((connection) => nodes.find((node) => node.id === connection.fromNodeId))
+        .filter((node): node is CanvasNodeData => Boolean(node && (isResourceNode(node) || node.type === CanvasNodeType.Group)));
+}
+
+export function getGroupResourceNodes(groupId: string, nodes: CanvasNodeData[]): CanvasNodeData[] {
+    const seenGroups = new Set<string>();
+    const seenResources = new Set<string>();
+    const collect = (currentGroupId: string): CanvasNodeData[] => {
+        if (seenGroups.has(currentGroupId)) return [];
+        seenGroups.add(currentGroupId);
+        return nodes.filter((node) => node.metadata?.groupId === currentGroupId).flatMap((node) => {
+            if (node.type === CanvasNodeType.Group) return collect(node.id);
+            if (!isResourceNode(node) || seenResources.has(node.id)) return [];
+            seenResources.add(node.id);
+            return [node];
+        });
+    };
+    return collect(groupId);
 }
 
 function getContextResourceNodes(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]) {

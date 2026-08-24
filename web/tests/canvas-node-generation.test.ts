@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { buildNodeGenerationContext } from "@/components/canvas/canvas-node-generation";
-import { getMentionResourceNodes } from "@/lib/canvas/canvas-resource-references";
+import { buildNodeGenerationContext, buildNodeGenerationInputs } from "@/components/canvas/canvas-node-generation";
+import { getGroupResourceNodes, getMentionResourceNodes } from "@/lib/canvas/canvas-resource-references";
 import { buildImageReferencePromptText } from "@/lib/image-reference-prompt";
 import { CanvasNodeType, type CanvasConnection, type CanvasNodeData, type CanvasNodeMetadata } from "@/types/canvas";
 
@@ -77,5 +77,18 @@ describe("画布节点生成上下文", () => {
         expect(context.prompt).toContain("先参考 【图片1】，再参考 【图片2】。使用 【文本1】，并再次确认 【文本1】。");
         expect(context.prompt).toContain("【图片1】对应上传的第 1 张图片。\n【图片2】对应上传的第 2 张图片。");
         expect(context.prompt.split(copy.metadata?.content || "")).toHaveLength(2);
+    });
+
+    it("组作为生成输入时展开嵌套资源并去重", () => {
+        const nested = createNode("nested", CanvasNodeType.Group, { groupId: "root" }, "嵌套组");
+        const root = createNode("root", CanvasNodeType.Group, {}, "根组");
+        const image = createNode("group-image", CanvasNodeType.Image, { content: "data:image/png;base64,group", groupId: "nested" });
+        const text = createNode("group-text", CanvasNodeType.Text, { content: "组内文本", groupId: "root" });
+        const config = createNode("group-config", CanvasNodeType.Config, {});
+        const allNodes = [root, nested, image, text, config];
+        const allConnections = [connect("group-config", "root", "group-config"), connect("text-config", "group-text", "group-config")];
+
+        expect(getGroupResourceNodes("root", allNodes).map((node) => node.id)).toEqual(["group-image", "group-text"]);
+        expect(buildNodeGenerationInputs("group-config", allNodes, allConnections).map((input) => input.nodeId)).toEqual(["group-image", "group-text"]);
     });
 });

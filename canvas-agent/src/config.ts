@@ -23,8 +23,16 @@ export function loadConfig(create = false): CanvasAgentConfig {
 }
 
 export function saveConfig(config: CanvasAgentConfig) {
-    fs.mkdirSync(CONFIG_DIR, { recursive: true });
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+    writeConfigFile(CONFIG_DIR, CONFIG_FILE, config);
+}
+
+export function writeConfigFile(dir: string, file: string, config: CanvasAgentConfig) {
+    fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
+    fs.writeFileSync(file, JSON.stringify(config, null, 2), { mode: 0o600 });
+    if (process.platform !== "win32") {
+        fs.chmodSync(dir, 0o700);
+        fs.chmodSync(file, 0o600);
+    }
 }
 
 export function ensureSiteWorkspace(config: CanvasAgentConfig) {

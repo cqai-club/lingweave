@@ -4,7 +4,7 @@ import { seedanceReferenceLabel } from "@/lib/seedance-video";
 import type { ReferenceImage } from "@/types/image";
 import type { ReferenceAudio, ReferenceVideo } from "@/types/media";
 import { CanvasNodeType, type CanvasConnection, type CanvasNodeData } from "@/types/canvas";
-import { getGenerationResourceNodes } from "@/lib/canvas/canvas-resource-references";
+import { getGenerationResourceNodes, getGroupResourceNodes } from "@/lib/canvas/canvas-resource-references";
 
 export type NodeGenerationContext = {
     prompt: string;
@@ -116,7 +116,14 @@ function buildComposerGenerationContext(inputs: NodeGenerationInput[], prompt: s
 }
 
 export function buildNodeGenerationInputs(nodeId: string, nodes: CanvasNodeData[], connections: CanvasConnection[]): NodeGenerationInput[] {
-    return getGenerationResourceNodes(nodeId, nodes, connections).flatMap((node): NodeGenerationInput[] => {
+    const inputs = getGenerationResourceNodes(nodeId, nodes, connections).flatMap((node): NodeGenerationInput[] => {
+        if (node.type === CanvasNodeType.Group) return getGroupResourceNodes(node.id, nodes).flatMap((child: CanvasNodeData) => buildNodeGenerationInput(child));
+        return buildNodeGenerationInput(node);
+    });
+    return inputs.filter((input, index, list) => list.findIndex((item) => item.nodeId === input.nodeId) === index);
+}
+
+function buildNodeGenerationInput(node: CanvasNodeData): NodeGenerationInput[] {
         const image = readReferenceImage(node);
         if (image) return [{ nodeId: node.id, type: "image" as const, title: node.title, image }];
         const video = readReferenceVideo(node);
@@ -126,7 +133,6 @@ export function buildNodeGenerationInputs(nodeId: string, nodes: CanvasNodeData[
         const text = readNodeTextInput(node);
         if (text) return [{ nodeId: node.id, type: "text" as const, title: node.title, text }];
         return [];
-    });
 }
 
 export function buildNodeResponseMessages(context: NodeGenerationContext): AiTextMessage[] {

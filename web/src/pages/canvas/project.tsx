@@ -22,6 +22,8 @@ import { App, Button, Dropdown, Modal } from "antd";
 import { NODE_DEFAULT_SIZE, getNodeSpec } from "@/constant/canvas";
 import { ActiveConnectionPath, ConnectionPath } from "@/components/canvas/canvas-connections";
 import { CanvasConfigComposer } from "@/components/canvas/canvas-config-composer";
+import { CanvasNodeReferenceBar } from "@/components/canvas/canvas-node-reference-bar";
+import { CanvasSidePanel } from "@/components/canvas/canvas-side-panel";
 import { CanvasConfigNodePanel } from "@/components/canvas/canvas-config-node-panel";
 import { CanvasThinkingNodePanel } from "@/components/canvas/canvas-thinking-node-panel";
 import { CanvasNodeContextMenu } from "@/components/canvas/canvas-context-menu";
@@ -44,6 +46,7 @@ import { useCanvasStore, type CanvasProject } from "@/stores/canvas/use-canvas-s
 import { applyCanvasAgentOps, runnableCanvasAgentGenerationOps, type CanvasAgentOp, type CanvasAgentSnapshot } from "@/lib/canvas/canvas-agent-ops";
 import { buildCanvasResourceReferences, buildNodeMentionReferences } from "@/lib/canvas/canvas-resource-references";
 import { buildThinkingPrompt, createThinkingBranch, createThinkingResultTool, normalizeThinkingCount, parseThinkingItems } from "@/lib/canvas/canvas-thinking";
+import { captureVideoFrame } from "@/lib/canvas/canvas-video-frame";
 import {
     CanvasNodeType,
     type CanvasAssistantImage,
@@ -325,6 +328,7 @@ function InfiniteCanvasPage() {
     const [nodeCreatePosition, setNodeCreatePosition] = useState<Position | null>(null);
     const [runningNodeId, setRunningNodeId] = useState<string | null>(null);
     const [isMiniMapOpen, setIsMiniMapOpen] = useState(false);
+    const [isSidePanelOpen, setIsSidePanelOpen] = useState(false);
     const [backgroundMode, setBackgroundMode] = useState<CanvasBackgroundMode>("lines");
     const [showImageInfo, setShowImageInfo] = useState(false);
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
@@ -747,6 +751,9 @@ function InfiniteCanvasPage() {
         });
         return map;
     }, [connections, nodes]);
+    const disconnectReference = useCallback((fromNodeId: string, toNodeId: string) => {
+        setConnections((prev) => prev.filter((connection) => !(connection.fromNodeId === fromNodeId && connection.toNodeId === toNodeId)));
+    }, []);
     const resourceContextNodeId = dialogNodeId || activeNodeId;
     const canvasResourceReferences = useMemo(() => buildCanvasResourceReferences(nodes, connections, resourceContextNodeId), [connections, nodes, resourceContextNodeId]);
     const resourceReferenceByNodeId = useMemo(() => new Map(canvasResourceReferences.map((reference) => [reference.nodeId, reference])), [canvasResourceReferences]);
@@ -1349,6 +1356,27 @@ function InfiniteCanvasPage() {
         setDialogNodeId(id);
     }, []);
 
+    const captureVideoNodeFrame = useCallback(async (nodeId: string, mode: "start" | "current" | "end") => {
+        const node = nodesRef.current.find((item) => item.id === nodeId);
+        if (!node || node.type !== CanvasNodeType.Video || !node.metadata?.content) return;
+        const element = document.querySelector<HTMLVideoElement>(`[data-canvas-video-node="${CSS.escape(nodeId)}"]`);
+        const duration = element?.duration || (node.metadata.durationMs ? node.metadata.durationMs / 1000 : 0);
+        const time = mode === "current" ? element?.currentTime || 0 : mode === "end" ? Math.max(0, duration - 0.05) : 0;
+        try {
+            const frame = await captureVideoFrame(node.metadata.content, time);
+            const image = await uploadImage(frame.dataUrl);
+            const id = nanoid();
+            const position = { x: node.position.x + node.width + 80, y: node.position.y };
+            const size = fitNodeSize(image.width, image.height);
+            setNodes((prev) => [...prev, { id, type: CanvasNodeType.Image, title: `${node.title || "视频"} · ${mode === "start" ? "首帧" : mode === "end" ? "尾帧" : "当前帧"}`, position, width: size.width, height: size.height, metadata: imageMetadata(image) }]);
+            setConnections((prev) => [...prev, { id: nanoid(), fromNodeId: nodeId, toNodeId: id }]);
+            setSelectedNodeIds(new Set([id]));
+            setDialogNodeId(id);
+        } catch (error) {
+            message.error(error instanceof Error ? error.message : "视频帧截取失败");
+        }
+    }, [message]);
+
     const createVideoFileNode = useCallback(async (file: File, position: Position) => {
         const video = await uploadMediaFile(file, "video");
         const size = fitNodeSize(video.width || 1280, video.height || 720, VIDEO_NODE_MAX_WIDTH, VIDEO_NODE_MAX_HEIGHT);
@@ -1532,6 +1560,10 @@ function InfiniteCanvasPage() {
 
     const handleNodeContentChange = useCallback((nodeId: string, content: string) => {
         setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, content } } : node)));
+    }, []);
+
+    const handleTextAlternativeChange = useCallback((nodeId: string, index: number) => {
+        setNodes((prev) => prev.map((node) => (node.id === nodeId ? { ...node, metadata: { ...node.metadata, textAlternativeIndex: index, content: node.metadata?.textAlternatives?.[index] || node.metadata?.content } } : node)));
     }, []);
 
     const handleNodeTitleChange = useCallback((nodeId: string, title: string) => {
@@ -2343,6 +2375,13 @@ function InfiniteCanvasPage() {
                 );
                 if (controller.signal.aborted) return;
                 const answerByNodeId = new Map(answers.map((item) => [item.nodeId, item.content]));
+                if (isConfigNode && childIds.length > 1) {
+                    const alternatives = childIds.map((id) => answerByNodeId.get(id) || "").filter(Boolean);
+                    const primaryId = childIds[0];
+                    setNodes((prev) => prev.filter((node) => !childIds.slice(1).includes(node.id)).map((node) => node.id === primaryId ? { ...node, metadata: { ...node.metadata, content: alternatives[0] || streamed, textAlternatives: alternatives, textAlternativeIndex: 0, status: "success" } } : node));
+                    setConnections((prev) => prev.filter((connection) => !childIds.slice(1).includes(connection.toNodeId)));
+                    return;
+                }
                 setNodes((prev) =>
                     prev.map((node) =>
                         childIds.includes(node.id)
@@ -2668,30 +2707,36 @@ function InfiniteCanvasPage() {
                             showImageInfo={showImageInfo}
                             resourceLabel={resourceReferenceByNodeId.get(node.id)}
                             mentionReferences={mentionReferencesByNodeId.get(node.id) || []}
-                            renderPanel={(panelNode) =>
-                                panelNode.type === CanvasNodeType.Config ? (
-                                    <CanvasConfigComposer
-                                        value={panelNode.metadata?.composerContent ?? panelNode.metadata?.prompt ?? ""}
-                                        inputs={configInputsById.get(panelNode.id) || []}
-                                        onChange={(composerContent) => handleConfigNodeChange(panelNode.id, { composerContent })}
-                                        onClose={() => setDialogNodeId(null)}
-                                    />
-                                ) : (
-                                    <CanvasNodePromptPanel
-                                        node={panelNode}
-                                        isRunning={runningNodeId === panelNode.id}
-                                        mentionReferences={mentionReferencesByNodeId.get(panelNode.id) || []}
-                                        onPromptChange={handleNodePromptChange}
-                                        onConfigChange={handleConfigNodeChange}
-                                        onGenerate={handleGenerateNode}
-                                        onStop={confirmStopGeneration}
-                                        onImageSettingsOpenChange={(open) => {
-                                            setNodeImageSettingsOpen(open);
-                                            if (open) setToolbarNodeId(null);
-                                        }}
-                                    />
-                                )
-                            }
+                            renderPanel={(panelNode) => {
+                                const connectedNodes = connections.filter((connection) => connection.toNodeId === panelNode.id).map((connection) => nodeById.get(connection.fromNodeId)).filter((node): node is CanvasNodeData => Boolean(node));
+                                return (
+                                    <>
+                                        <CanvasNodeReferenceBar nodeId={panelNode.id} nodes={nodes} connectedNodes={connectedNodes} onDisconnect={disconnectReference} onSelectNode={(nodeId) => { setSelectedNodeIds(new Set([nodeId])); setDialogNodeId(nodeId); }} />
+                                        {panelNode.type === CanvasNodeType.Config ? (
+                                            <CanvasConfigComposer
+                                                value={panelNode.metadata?.composerContent ?? panelNode.metadata?.prompt ?? ""}
+                                                inputs={configInputsById.get(panelNode.id) || []}
+                                                onChange={(composerContent) => handleConfigNodeChange(panelNode.id, { composerContent })}
+                                                onClose={() => setDialogNodeId(null)}
+                                            />
+                                        ) : (
+                                            <CanvasNodePromptPanel
+                                                node={panelNode}
+                                                isRunning={runningNodeId === panelNode.id}
+                                                mentionReferences={mentionReferencesByNodeId.get(panelNode.id) || []}
+                                                onPromptChange={handleNodePromptChange}
+                                                onConfigChange={handleConfigNodeChange}
+                                                onGenerate={handleGenerateNode}
+                                                onStop={confirmStopGeneration}
+                                                onImageSettingsOpenChange={(open) => {
+                                                    setNodeImageSettingsOpen(open);
+                                                    if (open) setToolbarNodeId(null);
+                                                }}
+                                            />
+                                        )}
+                                    </>
+                                );
+                            }}
                             renderNodeContent={(contentNode) =>
                                 contentNode.type === CanvasNodeType.Thinking ? (
                                     <CanvasThinkingNodePanel
@@ -2728,6 +2773,7 @@ function InfiniteCanvasPage() {
                             onConnectStart={handleConnectStart}
                             onResize={handleNodeResize}
                             onContentChange={handleNodeContentChange}
+                            onTextAlternativeChange={handleTextAlternativeChange}
                             onTitleChange={handleNodeTitleChange}
                             onToggleBatch={toggleBatchExpanded}
                             onSetBatchPrimary={setBatchPrimary}
@@ -2767,6 +2813,8 @@ function InfiniteCanvasPage() {
                         />
                     ) : null}
                 </InfiniteCanvas>
+
+                {isSidePanelOpen ? <CanvasSidePanel nodes={nodes} selectedNodeIds={selectedNodeIds} onFocusNode={(nodeId) => { const target = nodeById.get(nodeId); if (!target) return; setSelectedNodeIds(new Set([nodeId])); setDialogNodeId(target.type === CanvasNodeType.Group ? null : nodeId); setViewport((current) => ({ ...current, x: size.width / 2 - (target.position.x + target.width / 2) * current.k, y: size.height / 2 - (target.position.y + target.height / 2) * current.k })); }} /> : null}
 
                 <CanvasNodeHoverToolbar
                     node={isNodeDragging || nodeImageSettingsOpen ? null : toolbarNode}
@@ -2819,6 +2867,8 @@ function InfiniteCanvasPage() {
                     onOpenMyAssets={() => {
                         setAssetPickerOpen(true);
                     }}
+                    onToggleSidePanel={() => setIsSidePanelOpen((value) => !value)}
+                    sidePanelOpen={isSidePanelOpen}
                 />
 
                 {isMiniMapOpen ? <Minimap nodes={nodes} viewport={viewport} viewportSize={size} onViewportChange={setViewport} /> : null}
@@ -2842,6 +2892,10 @@ function InfiniteCanvasPage() {
                             }
                             setContextMenu(null);
                         }}
+                        onCaptureVideoFrame={contextMenu.type === "node" && nodesRef.current.find((item) => item.id === contextMenu.nodeId)?.type === CanvasNodeType.Video ? (mode) => {
+                            void captureVideoNodeFrame(contextMenu.nodeId, mode);
+                            setContextMenu(null);
+                        } : undefined}
                     />
                 ) : null}
 

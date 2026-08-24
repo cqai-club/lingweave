@@ -1,7 +1,7 @@
 import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode, RefObject } from "react";
 import { useRef, useState } from "react";
 import { Button, Segmented, Switch } from "antd";
-import { BrainCircuit, CircleDot, Eraser, FolderOpen, Grid2x2, Group, Hand, Image as ImageIcon, Info, Moon, Music2, Palette, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Upload, Video } from "lucide-react";
+import { BrainCircuit, CircleDot, Eraser, FolderOpen, Grid2x2, Group, Hand, Image as ImageIcon, Info, List, Moon, Music2, Palette, Redo2, Settings2, Square, Sun, Trash2, Type, Undo2, Upload, Video } from "lucide-react";
 
 import { canvasThemes, type CanvasBackgroundMode, type CanvasColorTheme, type CanvasTheme } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
@@ -29,6 +29,8 @@ export function CanvasToolbar({
     onBackgroundModeChange,
     onShowImageInfoChange,
     onOpenMyAssets,
+    onToggleSidePanel,
+    sidePanelOpen,
 }: {
     selectedCount: number;
     canUndo: boolean;
@@ -51,6 +53,8 @@ export function CanvasToolbar({
     onBackgroundModeChange: (mode: CanvasBackgroundMode) => void;
     onShowImageInfoChange: (show: boolean) => void;
     onOpenMyAssets: () => void;
+    onToggleSidePanel: () => void;
+    sidePanelOpen: boolean;
 }) {
     const wrapRef = useRef<HTMLDivElement>(null);
     const colorTheme = useThemeStore((state) => state.theme);
@@ -106,6 +110,9 @@ export function CanvasToolbar({
                 <Divider theme={theme} />
                 <ToolbarButton id="tool-assets" label="我的素材" hovered={hovered} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onOpenMyAssets}>
                     <FolderOpen className="size-4.5" />
+                </ToolbarButton>
+                <ToolbarButton id="tool-side-panel" label="画布元素" active={sidePanelOpen} hovered={hovered} activeStyle={activeStyle} hoverStyle={hoverStyle} wrapRef={wrapRef} onTipX={setTipX} onHover={setHovered} onClick={onToggleSidePanel}>
+                    <List className="size-4.5" />
                 </ToolbarButton>
                 <ToolbarButton
                     id="tool-style"

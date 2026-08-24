@@ -230,25 +230,28 @@ function supportsGeminiImageSize(model: string) {
     return value.includes("gemini-3") || value.includes("3.1") || value.includes("3-pro");
 }
 
-function resolveImageDataUrl(item: Record<string, unknown>) {
+async function resolveImageDataUrl(item: Record<string, unknown>) {
     if (typeof item.b64_json === "string" && item.b64_json) {
         return `data:image/png;base64,${item.b64_json}`;
     }
     if (typeof item.url === "string" && item.url) {
-        return item.url;
+        try {
+            return await imageToDataUrl({ dataUrl: item.url });
+        } catch {
+            return item.url;
+        }
     }
     return null;
 }
 
-function parseImagePayload(payload: ImageApiResponse) {
+async function parseImagePayload(payload: ImageApiResponse) {
     if (typeof payload.code === "number" && payload.code !== 0) {
         throw new Error(payload.msg || "请求失败");
     }
     const images =
-        payload.data
-            ?.map(resolveImageDataUrl)
+        (await Promise.all(payload.data?.map(resolveImageDataUrl) || []))
             .filter((value): value is string => Boolean(value))
-            .map((dataUrl) => ({ id: nanoid(), dataUrl })) || [];
+            .map((dataUrl) => ({ id: nanoid(), dataUrl }));
 
     if (images.length === 0) {
         throw new Error("接口没有返回图片");
@@ -260,6 +263,7 @@ function parseImagePayload(payload: ImageApiResponse) {
 function readAxiosError(error: unknown, fallback: string) {
     if (axios.isCancel(error)) return "请求已取消";
     if (axios.isAxiosError<{ error?: { message?: string }; msg?: string; code?: number }>(error)) {
+        if (!error.response && error.code === "ERR_NETWORK") return "请求被跨域拦截，请通过自己的服务转发请求或检查接口 CORS 配置";
         const responseData = error.response?.data;
         return responseData?.msg || responseData?.error?.message || readStatusError(error.response?.status, fallback);
     }
@@ -704,7 +708,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
                 n,
                 ...(quality ? { quality } : {}),
                 ...(requestSize ? { size: requestSize } : {}),
-                response_format: "b64_json",
+                ...(/gpt-image/i.test(requestConfig.model) ? {} : { response_format: "b64_json" }),
                 output_format: IMAGE_OUTPUT_FORMAT,
             },
             {
@@ -712,7 +716,7 @@ export async function requestGeneration(config: AiConfig, prompt: string, option
                 signal: options?.signal,
             },
         );
-        const images = parseImagePayload(response.data);
+        const images = await parseImagePayload(response.data);
         return images;
     } catch (error) {
         throw new Error(readAxiosError(error, "请求失败"));
@@ -737,7 +741,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
     formData.set("model", requestConfig.model);
     formData.set("prompt", withSystemPrompt(requestConfig, requestPrompt));
     formData.set("n", String(n));
-    formData.set("response_format", "b64_json");
+    if (!/gpt-image/i.test(requestConfig.model)) formData.set("response_format", "b64_json");
     formData.set("output_format", IMAGE_OUTPUT_FORMAT);
     if (quality) {
         formData.set("quality", quality);
@@ -751,7 +755,7 @@ export async function requestEdit(config: AiConfig, prompt: string, references: 
 
     try {
         const response = await axios.post<ImageApiResponse>(aiApiUrl(requestConfig, "/images/edits"), formData, { headers: aiHeaders(requestConfig), signal: options?.signal });
-        const images = parseImagePayload(response.data);
+        const images = await parseImagePayload(response.data);
         return images;
     } catch (error) {
         throw new Error(readAxiosError(error, "请求失败"));

@@ -1,5 +1,5 @@
 import { App, Button, Form, Input, Modal, Progress, Select, Switch, Tabs } from "antd";
-import { CircleAlert, Cloud, KeyRound, Link2, LogIn, Plus, RefreshCw, ShieldCheck, Trash2, Wifi } from "lucide-react";
+import { CircleAlert, Cloud, HardDrive, KeyRound, Link2, LogIn, Plus, RefreshCw, ShieldCheck, Trash2, Wifi } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { ModelPicker } from "@/components/model-picker";
@@ -27,6 +27,8 @@ type WebdavDomainProgress = {
     total?: number;
     status?: "active" | "success" | "exception";
 };
+
+type StorageEstimate = { usage: number; quota: number; persisted: boolean | null };
 
 const modelGroups: ModelGroup[] = [
     { capability: "image", modelKey: "imageModel", modelsKey: "imageModels", defaultLabel: "默认生图模型", optionsLabel: "生图模型可选项" },
@@ -71,6 +73,8 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     const [syncingWebdav, setSyncingWebdav] = useState(false);
     const [webdavSyncStatus, setWebdavSyncStatus] = useState("");
     const [webdavDomainProgress, setWebdavDomainProgress] = useState(createWebdavDomainProgress);
+    const [storageEstimate, setStorageEstimate] = useState<StorageEstimate | null>(null);
+    const [loadingStorage, setLoadingStorage] = useState(false);
     const config = useEffectiveConfig();
     const webdav = useConfigStore((state) => state.webdav);
     const updateConfig = useConfigStore((state) => state.updateConfig);
@@ -96,6 +100,21 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     const modelOptions = config.models.map((model) => ({ label: modelOptionLabel(config, model), value: model }));
     const webdavReady = Boolean(webdav.url.trim());
     useEffect(() => setActiveTab(initialTab), [initialTab]);
+
+    const refreshStorageEstimate = async () => {
+        setLoadingStorage(true);
+        try {
+            const estimate = await navigator.storage?.estimate?.();
+            const persisted = navigator.storage?.persisted ? await navigator.storage.persisted() : null;
+            setStorageEstimate({ usage: estimate?.usage || 0, quota: estimate?.quota || 0, persisted });
+        } finally {
+            setLoadingStorage(false);
+        }
+    };
+
+    useEffect(() => {
+        if (activeTab === "storage") void refreshStorageEstimate();
+    }, [activeTab]);
 
     const saveConfig = (nextConfig: AiConfig) => {
         (Object.keys(nextConfig) as Array<keyof AiConfig>).forEach((key) => updateConfig(key, nextConfig[key]));
@@ -454,6 +473,34 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                         ),
                     },
                     {
+                        key: "storage",
+                        label: "本地存储",
+                        children: (
+                            <section className="rounded-lg border border-stone-200 p-4 dark:border-stone-800">
+                                <div className="mb-4 flex items-start justify-between gap-3">
+                                    <div>
+                                        <div className="flex items-center gap-2 text-sm font-semibold"><HardDrive className="size-4" />浏览器本地存储用量</div>
+                                        <div className="mt-1 text-xs leading-5 text-stone-500">画布、我的素材、图片和媒体文件目前默认保存在当前浏览器，不代表云端同步容量。</div>
+                                    </div>
+                                    <Button size="small" icon={<RefreshCw className="size-3.5" />} loading={loadingStorage} onClick={() => void refreshStorageEstimate()}>刷新</Button>
+                                </div>
+                                {storageEstimate ? (
+                                    <>
+                                        <div className="grid gap-3 sm:grid-cols-3">
+                                            <StorageMetric label="已用空间" value={formatBytes(storageEstimate.usage)} />
+                                            <StorageMetric label="浏览器配额" value={storageEstimate.quota ? formatBytes(storageEstimate.quota) : "暂不可用"} />
+                                            <StorageMetric label="持久化存储" value={storageEstimate.persisted === null ? "暂不可用" : storageEstimate.persisted ? "已启用" : "未启用"} />
+                                        </div>
+                                        <Progress className="mt-4" percent={storageEstimate.quota ? Math.min(100, Math.round((storageEstimate.usage / storageEstimate.quota) * 100)) : 0} format={(percent) => `${percent || 0}%`} />
+                                    </>
+                                ) : <div className="text-sm text-stone-500">正在读取浏览器存储信息…</div>}
+                                <div className="mt-4 grid gap-2 text-xs text-stone-500 sm:grid-cols-2">
+                                    {[["画布", "项目和节点"], ["我的素材", "图片、视频、音频"], ["生图工作台", "生成记录和参考图"], ["视频创作台", "生成记录和参考媒体"]].map(([label, detail]) => <div key={label} className="rounded-md border border-stone-200 px-3 py-2 dark:border-stone-800"><span className="font-medium text-stone-700 dark:text-stone-200">{label}</span><span className="ml-2">{detail}</span></div>)}
+                                </div>
+                            </section>
+                        ),
+                    },
+                    {
                         key: "codex",
                         label: "Codex",
                         children: (
@@ -650,4 +697,8 @@ function formatBytes(bytes: number) {
     if (bytes < 1024) return `${bytes}B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)}KB`;
     return `${(bytes / 1024 / 1024).toFixed(1)}MB`;
+}
+
+function StorageMetric({ label, value }: { label: string; value: string }) {
+    return <div className="rounded-md border border-stone-200 px-3 py-2 dark:border-stone-800"><div className="text-xs text-stone-500">{label}</div><div className="mt-1 text-sm font-semibold">{value}</div></div>;
 }

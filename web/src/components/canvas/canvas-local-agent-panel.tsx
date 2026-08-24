@@ -1,6 +1,6 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { App, Button, Input, Segmented, Tooltip } from "antd";
+import { App, Button, Input, Segmented, Select, Tooltip } from "antd";
 import copyToClipboard from "copy-to-clipboard";
 import { Copy, FolderOpen, History, KeyRound, Link2, LoaderCircle, PlugZap, Plus, RefreshCw, Square, Terminal, Trash2 } from "lucide-react";
 
@@ -39,12 +39,14 @@ type AgentWorkspace = { workspacePath: string; activeThreadId?: string };
 type AgentThreadsResponse = { ok?: boolean; workspace?: AgentWorkspace; data?: AgentThreadSummary[] };
 type AgentThreadResponse = { ok?: boolean; workspace?: AgentWorkspace; thread?: AgentThreadSummary; messages?: AgentChatItem[] };
 type AgentConfigResponse = { ok?: boolean; url?: string; token?: string; hasToken?: boolean };
+type AgentSkillSummary = { name: string; description: string };
 
 export function CanvasLocalAgentPanel({ embedded, headless, autoConnect }: { embedded?: boolean; headless?: boolean; autoConnect?: boolean }) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
     const user = useUserStore((state) => state.user);
     const { message, modal } = App.useApp();
     const [searchParams] = useSearchParams();
+    const [skills, setSkills] = useState<AgentSkillSummary[]>([]);
     const navigate = useNavigate();
     const { width, url, token, connected, enabled, prompt, attachments, sending, waiting, messages, eventLogs, threads, activeThreadId, workspacePath, loadingThreads, activeTab, confirmTools, activity, connectError, pendingTool, canvasContext, setAgentState, addMessage: pushMessage, addEventLog: pushEventLog, clearEventLogs } = useAgentStore();
     const listRef = useRef<HTMLDivElement>(null);
@@ -158,6 +160,11 @@ export function CanvasLocalAgentPanel({ embedded, headless, autoConnect }: { emb
 
     useEffect(() => {
         if (!connected) return;
+        void fetchAgentJson<{ skills?: AgentSkillSummary[] }>(endpoint, token, "/agent/codex/skills").then((data) => setSkills(data.skills || [])).catch(() => setSkills([]));
+    }, [connected, endpoint, token]);
+
+    useEffect(() => {
+        if (!connected) return;
         const timer = setTimeout(() => void postState(endpoint, token, clientIdRef.current, canvasContext?.snapshot || null), 300);
         return () => clearTimeout(timer);
     }, [canvasContext?.snapshot, connected, endpoint, token]);
@@ -175,7 +182,7 @@ export function CanvasLocalAgentPanel({ embedded, headless, autoConnect }: { emb
         addMessage({ role: "user", text: text || "发送了图片", attachments: files });
         addEventLog("用户发送", { text, attachments: files.map(({ name, type, size }) => ({ name, type, size })) });
         try {
-            const res = await fetch(`${endpoint}/agent/codex/turn?token=${encodeURIComponent(token)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: requestPrompt, threadId: useAgentStore.getState().activeThreadId || undefined, attachments: files.map(({ name, type, dataUrl }) => ({ name, type, dataUrl })) }) });
+            const res = await fetch(`${endpoint}/agent/codex/turn?token=${encodeURIComponent(token)}`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ prompt: expandSkillPrompt(requestPrompt, skills), threadId: useAgentStore.getState().activeThreadId || undefined, attachments: files.map(({ name, type, dataUrl }) => ({ name, type, dataUrl })) }) });
             if (!res.ok) throw new Error("本地 Agent 拒绝了请求");
             const data = (await res.json()) as { threadId?: string };
             if (data.threadId) setAgentState({ activeThreadId: data.threadId });
@@ -569,7 +576,7 @@ export function CanvasLocalAgentPanel({ embedded, headless, autoConnect }: { emb
                         onStop={stopTurn}
                         onAddFiles={addAttachments}
                         onRemoveAttachment={removeAttachment}
-                        left={attachments.length ? <span className="text-[11px]" style={{ color: theme.node.muted }}>{formatBytes(attachmentPayloadBytes(attachments))} / 30MB</span> : null}
+                        left={<div className="flex items-center gap-2">{skills.length ? <Select size="small" bordered={false} className="min-w-28" placeholder="插入 Skill" value={undefined} options={skills.map((skill) => ({ value: skill.name, label: `/${skill.name}` }))} onChange={(name) => setAgentState({ prompt: `${prompt.trim()} /${name} ` })} /> : null}{attachments.length ? <span className="text-[11px]" style={{ color: theme.node.muted }}>{formatBytes(attachmentPayloadBytes(attachments))} / 30MB</span> : null}</div>}
                     />
                 </>
             )}
@@ -1001,6 +1008,13 @@ function promptWithAttachments(text: string, attachments: AgentAttachment[]) {
     if (!attachments.length) return text;
     const names = attachments.map((item) => item.name).join("、");
     return [text, `用户上传了 ${attachments.length} 张图片附件：${names}。`].filter(Boolean).join("\n\n");
+}
+
+function expandSkillPrompt(prompt: string, skills: AgentSkillSummary[]) {
+    const match = prompt.match(/(?:^|\s)\/([a-zA-Z0-9._-]+)(?:\s|$)/);
+    if (!match) return prompt;
+    const skill = skills.find((item) => item.name === match[1]);
+    return skill ? `${prompt}\n\n请先读取并遵循工作区 .agents/skills/${skill.name}/SKILL.md 中的说明，再完成以上请求。` : prompt;
 }
 
 function attachmentPayloadBytes(attachments: AgentAttachment[]) {

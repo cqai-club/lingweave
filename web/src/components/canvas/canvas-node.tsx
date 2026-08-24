@@ -41,6 +41,7 @@ type CanvasNodeProps = {
     onConnectStart: (event: React.MouseEvent, nodeId: string, handleType: "source" | "target") => void;
     onResize: (nodeId: string, width: number, height: number, position?: Position) => void;
     onContentChange: (nodeId: string, content: string) => void;
+    onTextAlternativeChange?: (nodeId: string, index: number) => void;
     onTitleChange: (nodeId: string, title: string) => void;
     onToggleBatch?: (nodeId: string) => void;
     onSetBatchPrimary?: (node: CanvasNodeData) => void;
@@ -62,6 +63,7 @@ type NodeContentRendererProps = {
     batchRecovering: boolean;
     renderNodeContent?: (node: CanvasNodeData) => ReactNode;
     onContentChange: (nodeId: string, content: string) => void;
+    onTextAlternativeChange?: (nodeId: string, index: number) => void;
     onStopEditing: () => void;
     mentionReferences: CanvasResourceReference[];
     onRetry?: (node: CanvasNodeData) => void;
@@ -100,6 +102,7 @@ export const CanvasNode = React.memo(function CanvasNode({
     onConnectStart,
     onResize,
     onContentChange,
+    onTextAlternativeChange,
     onTitleChange,
     onToggleBatch,
     onSetBatchPrimary,
@@ -380,6 +383,7 @@ export const CanvasNode = React.memo(function CanvasNode({
                         renderNodeContent={renderNodeContent}
                         mentionReferences={mentionReferences}
                         onContentChange={onContentChange}
+                        onTextAlternativeChange={onTextAlternativeChange}
                         onStopEditing={() => setIsEditingContent(false)}
                         onRetry={onRetry}
                         onGenerateImage={onGenerateImage}
@@ -483,10 +487,13 @@ function UnknownNodeContent({ theme }: Pick<NodeContentRendererProps, "theme">) 
     );
 }
 
-function TextContent({ node, theme, isEditingContent, textareaRef, mentionReferences, onContentChange, onStopEditing, onGenerateImage }: NodeContentRendererProps) {
+function TextContent({ node, theme, isEditingContent, textareaRef, mentionReferences, onContentChange, onTextAlternativeChange, onStopEditing, onGenerateImage }: NodeContentRendererProps) {
     const fontSize = node.metadata?.fontSize || 14;
     const textStyle = { fontSize: `${fontSize}px`, lineHeight: `${Math.round(fontSize * 1.65)}px`, color: theme.node.text, boxSizing: "border-box" } as React.CSSProperties;
 
+    const alternatives = node.metadata?.textAlternatives || [];
+    const alternativeIndex = Math.min(Math.max(node.metadata?.textAlternativeIndex || 0, 0), Math.max(0, alternatives.length - 1));
+    const visibleText = alternatives.length ? alternatives[alternativeIndex] : node.metadata?.content;
     return (
         <div className="flex h-full w-full flex-col overflow-hidden pt-8">
             <button
@@ -528,9 +535,14 @@ function TextContent({ node, theme, isEditingContent, textareaRef, mentionRefere
                     style={textStyle}
                     onWheel={(event) => event.stopPropagation()}
                 >
-                    {node.metadata?.content || <span style={{ color: theme.node.placeholder }}>双击编辑文字</span>}
+                    {visibleText || <span style={{ color: theme.node.placeholder }}>双击编辑文字</span>}
                 </div>
             )}
+            {alternatives.length > 1 && !isEditingContent ? <div className="absolute bottom-2 right-3 z-20 flex items-center gap-1 rounded-full border px-1 py-0.5 text-[10px]" style={{ background: `${theme.toolbar.panel}ee`, borderColor: theme.node.stroke, color: theme.node.muted }}>
+                <button type="button" className="px-1.5 hover:opacity-70" onClick={(event) => { event.stopPropagation(); const index = (alternativeIndex + alternatives.length - 1) % alternatives.length; onTextAlternativeChange?.(node.id, index); onContentChange(node.id, alternatives[index]); }} aria-label="上一条备选文本">‹</button>
+                <span>{alternativeIndex + 1}/{alternatives.length}</span>
+                <button type="button" className="px-1.5 hover:opacity-70" onClick={(event) => { event.stopPropagation(); const index = (alternativeIndex + 1) % alternatives.length; onTextAlternativeChange?.(node.id, index); onContentChange(node.id, alternatives[index]); }} aria-label="下一条备选文本">›</button>
+            </div> : null}
         </div>
     );
 }
@@ -601,7 +613,7 @@ function VideoNodeContent({ node, theme }: NodeContentRendererProps) {
                 <span className="text-sm">空视频节点</span>
             </div>
         );
-    return <video src={node.metadata.content} controls className="h-full w-full rounded-[18px] bg-black object-contain" data-canvas-no-zoom />;
+    return <video src={node.metadata.content} controls className="h-full w-full rounded-[18px] bg-black object-contain" data-canvas-no-zoom data-canvas-video-node={node.id} />;
 }
 
 function AudioNodeContent({ node, theme }: NodeContentRendererProps) {

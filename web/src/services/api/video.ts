@@ -302,6 +302,7 @@ function readApiErrorMessage(value: unknown): string {
 function readAxiosError(error: unknown, fallback: string) {
     if (axios.isCancel(error)) return "请求已取消";
     if (axios.isAxiosError<{ error?: { message?: string }; msg?: string; message?: string; code?: number | string }>(error)) {
+        if (!error.response && error.code === "ERR_NETWORK") return "请求被跨域拦截，请通过自己的服务转发请求或检查接口 CORS 配置";
         const responseData = error.response?.data;
         return readApiErrorMessage(responseData) || statusMessage(error.response?.status, fallback);
     }

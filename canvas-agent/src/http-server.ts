@@ -4,6 +4,7 @@ import { DEFAULT_PORT, ensureSiteWorkspace, loadConfig, saveConfig, updateSiteWo
 import { CanvasSession } from "./canvas-session.js";
 import { archiveCodexThread, interruptCodexTurn, listCodexThreads, readCodexThread, resumeCodexThread, runClaudeTurn, runCodexTurn, startCodexThread, summarizeCodexThread, verifyCodexThreadWorkspace, withAgentPrompt } from "./agents.js";
 import type { AgentAttachment } from "./types.js";
+import { deleteAgentSkill, listAgentSkills, readAgentSkill, writeAgentSkill } from "./skills.js";
 
 export function startHttpServer() {
     const config = loadConfig(true);
@@ -42,6 +43,23 @@ export function startHttpServer() {
         const workspace = ensureSiteWorkspace(config);
         res.json({ ok: true, workspace });
     });
+    app.get("/agent/codex/skills", route(async (_req, res) => {
+        const workspace = ensureSiteWorkspace(config);
+        res.json({ ok: true, skills: await listAgentSkills(workspace.workspacePath) });
+    }));
+    app.get("/agent/codex/skills/:name", route(async (req, res) => {
+        const workspace = ensureSiteWorkspace(config);
+        res.json({ ok: true, skill: await readAgentSkill(workspace.workspacePath, routeParam(req.params.name)) });
+    }));
+    app.post("/agent/codex/skills", route(async (req, res) => {
+        const workspace = ensureSiteWorkspace(config);
+        res.json({ ok: true, skill: await writeAgentSkill(workspace.workspacePath, { name: String(req.body?.name || ""), description: String(req.body?.description || ""), content: String(req.body?.content || "") }) });
+    }));
+    app.post("/agent/codex/skills/:name/delete", route(async (req, res) => {
+        const workspace = ensureSiteWorkspace(config);
+        await deleteAgentSkill(workspace.workspacePath, routeParam(req.params.name));
+        res.json({ ok: true });
+    }));
     app.get("/agent/codex/threads", route(async (req, res) => {
         const workspace = ensureSiteWorkspace(config);
         const result = await listCodexThreads(emit, { cwd: workspace.workspacePath, searchTerm: String(req.query.searchTerm || "") });

@@ -1,12 +1,12 @@
 import { useEffect } from "react";
 import type { ReactNode } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Camera, Plus, Trash2 } from "lucide-react";
 
 import { canvasThemes } from "@/lib/canvas-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 import type { ContextMenuState } from "@/types/canvas";
 
-export function CanvasNodeContextMenu({ menu, onClose, onDuplicate, onDelete }: { menu: ContextMenuState; onClose: () => void; onDuplicate: () => void; onDelete: () => void }) {
+export function CanvasNodeContextMenu({ menu, onClose, onDuplicate, onDelete, onCaptureVideoFrame }: { menu: ContextMenuState; onClose: () => void; onDuplicate: () => void; onDelete: () => void; onCaptureVideoFrame?: (mode: "start" | "current" | "end") => void }) {
     const theme = canvasThemes[useThemeStore((state) => state.theme)];
 
     useEffect(() => {
@@ -26,6 +26,13 @@ export function CanvasNodeContextMenu({ menu, onClose, onDuplicate, onDelete }: 
             onPointerDown={(event) => event.stopPropagation()}
         >
             {menu.type === "node" ? <MenuButton icon={<Plus className="size-4" />} label="复制" onClick={onDuplicate} /> : null}
+            {menu.type === "node" && onCaptureVideoFrame ? (
+                <>
+                    <MenuButton icon={<Camera className="size-4" />} label="截取首帧" onClick={() => onCaptureVideoFrame("start")} />
+                    <MenuButton icon={<Camera className="size-4" />} label="截取当前帧" onClick={() => onCaptureVideoFrame("current")} />
+                    <MenuButton icon={<Camera className="size-4" />} label="截取尾帧" onClick={() => onCaptureVideoFrame("end")} />
+                </>
+            ) : null}
             <MenuButton icon={<Trash2 className="size-4" />} label="删除" onClick={onDelete} danger />
         </div>
     );
