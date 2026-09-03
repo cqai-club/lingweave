@@ -36,7 +36,7 @@
 ## 说明
 
 - 当前画布项目和“我的素材”主要保存在浏览器本地，跨设备可自行配置 WebDAV 同步。
-- AI API Key 保存在浏览器本地，并由前端直接请求 OpenAI 兼容接口。
+- 配置 Account Service 时，浏览器使用 Logto Access Token 请求账号服务，由服务端代理 NewAPI；未配置时才由浏览器直接使用本地 Base URL 和 API Key 请求 OpenAI 兼容接口。
 
 ## 原理说明
 

@@ -1,25 +1,22 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { NIFFLER_CHANNEL_ID, type NifflerRuntime } from "@/services/api/niffler";
 import {
     buildApiUrl,
     createModelChannel,
     defaultConfig,
     encodeChannelModel,
     getEffectiveConfig,
-    modelOptionName,
     modelOptionsFromChannels,
     resolveModelRequestConfig,
+    selectableModelsByCapability,
+    stripLocalAiCredentials,
+    syncConfigWithChannels,
     useConfigStore,
 } from "@/stores/use-config-store";
-import { useNifflerStore } from "@/stores/use-niffler-store";
-
-const emptyNifflerModels = { model: "", imageModel: "", videoModel: "", textModel: "", audioModel: "" };
 
 beforeEach(() => {
     window.localStorage.clear();
-    useNifflerStore.setState({ status: "idle", session: null, runtime: null, error: "", loginOpen: false, selectingKey: false });
-    useConfigStore.setState({ config: structuredClone(defaultConfig), nifflerModels: emptyNifflerModels });
+    useConfigStore.setState({ config: structuredClone(defaultConfig) });
 });
 
 describe("API URL", () => {
@@ -47,38 +44,82 @@ describe("模型渠道", () => {
         expect(requestConfig.apiKey).toBe("second-key");
     });
 
-    it("登录后返回 Niffler 有效配置并保留用户选择", () => {
-        const runtime: NifflerRuntime = {
-            baseUrl: "https://canvas.example.com",
-            apiKey: "runtime-secret",
-            apiKeyId: "key-1",
-            apiKeys: [{ id: "key-1", name: "主 Key" }],
-            models: ["image-a", "image-b", "text-a"],
-            imageModels: ["image-a", "image-b"],
-            videoModels: [],
-            textModels: ["text-a"],
-            audioModels: [],
-        };
-        useNifflerStore.setState({ runtime });
-        useConfigStore.getState().applyNifflerModels(runtime);
-        useConfigStore.getState().updateConfig("imageModel", encodeChannelModel(NIFFLER_CHANNEL_ID, "image-b"));
+    it("按渠道保留文本调用协议", () => {
+        const channels = [createModelChannel({ id: "default", textProtocol: "responses", models: ["gpt-test"], modelsLoaded: true })];
+        const config = syncConfigWithChannels({ ...structuredClone(defaultConfig), channels, models: modelOptionsFromChannels(channels), textModels: ["default::gpt-test"], textModel: "default::gpt-test" }, channels);
 
-        const config = getEffectiveConfig();
-        expect(config.apiKey).toBe("runtime-secret");
-        expect(config.channels).toHaveLength(1);
-        expect(config.channels[0].id).toBe(NIFFLER_CHANNEL_ID);
-        expect(modelOptionName(config.imageModel)).toBe("image-b");
-        expect(useConfigStore.getState().config.apiKey).toBe("");
+        expect(resolveModelRequestConfig(config, "default::gpt-test", "text").textProtocol).toBe("responses");
     });
 
-    it("持久化模型选择但不持久化 Niffler 运行时凭证", () => {
-        const selection = { ...emptyNifflerModels, imageModel: encodeChannelModel(NIFFLER_CHANNEL_ID, "image-b") };
-        useConfigStore.setState({ nifflerModels: selection });
+    it("本地模式持久化渠道配置，账号服务模式持久化时清理密钥", () => {
+        useConfigStore.getState().updateConfig("apiKey", "local-secret");
         const partialize = useConfigStore.persist.getOptions().partialize;
         const persisted = partialize?.(useConfigStore.getState()) as Record<string, unknown>;
 
-        expect(persisted.nifflerModels).toEqual(selection);
-        expect(persisted).not.toHaveProperty("runtime");
-        expect(JSON.stringify(persisted)).not.toContain("runtime-secret");
+        expect(getEffectiveConfig().apiKey).toBe("local-secret");
+        expect((persisted.config as { apiKey: string }).apiKey).toBe(defaultConfig.channelMode === "remote" ? "" : "local-secret");
+        expect(Object.keys(persisted).sort()).toEqual(["config", "webdav"]);
+    });
+
+    it("账号服务模式清理顶层和渠道中的本地 API Key", () => {
+        const config = {
+            ...structuredClone(defaultConfig),
+            apiKey: "top-level-secret",
+            channels: [createModelChannel({ id: "default", baseUrl: "https://ai.example.com", apiKey: "channel-secret", models: ["gpt-test"] })],
+        };
+
+        const sanitized = stripLocalAiCredentials(config);
+
+        expect(sanitized.apiKey).toBe("");
+        expect(sanitized.channels[0]?.apiKey).toBe("");
+        expect(sanitized.channels[0]?.baseUrl).toBe("https://ai.example.com");
+        expect(sanitized.channels[0]?.models).toEqual(["gpt-test"]);
+    });
+
+    it("只保留已获取且能力匹配的模型，并同步默认模型", () => {
+        const channels = [createModelChannel({ id: "default", models: ["gpt-image-2", "sora-2", "gpt-5.5", "gpt-4o-mini-tts"], modelsLoaded: true })];
+        const config = syncConfigWithChannels(
+            {
+                ...structuredClone(defaultConfig),
+                imageModels: ["missing-image", "default::gpt-image-2", "default::gpt-5.5"],
+                imageModel: "missing-image",
+            },
+            channels,
+        );
+
+        expect(config.imageModels).toEqual(["default::gpt-image-2"]);
+        expect(config.imageModel).toBe("default::gpt-image-2");
+        expect(selectableModelsByCapability(config, "video")).toEqual(["default::sora-2"]);
+        expect(selectableModelsByCapability(config, "text")).toEqual(["default::gpt-5.5"]);
+        expect(selectableModelsByCapability(config, "audio")).toEqual(["default::gpt-4o-mini-tts"]);
+    });
+
+    it("模型列表清空后同步清空能力可选项和默认模型", () => {
+        const config = syncConfigWithChannels(
+            {
+                ...structuredClone(defaultConfig),
+                imageModels: ["default::gpt-image-2"],
+                imageModel: "default::gpt-image-2",
+            },
+            [createModelChannel({ id: "default", models: [] })],
+        );
+
+        expect(config.models).toEqual([]);
+        expect(config.imageModels).toEqual([]);
+        expect(config.imageModel).toBe("");
+    });
+
+    it("请求前拒绝未获取或能力不匹配的模型", () => {
+        const config = syncConfigWithChannels(structuredClone(defaultConfig), [createModelChannel({ id: "default", models: ["gpt-image-2", "gpt-5.5"], modelsLoaded: true })]);
+
+        expect(() => resolveModelRequestConfig(config, "default::missing", "image")).toThrow("不在已获取的模型列表中");
+        expect(() => resolveModelRequestConfig(config, "default::gpt-5.5", "image")).toThrow("不支持或未启用生图能力");
+        expect(resolveModelRequestConfig(config, "default::gpt-image-2", "image").model).toBe("gpt-image-2");
+    });
+
+    it("账号服务模式不使用未标记为已获取的旧模型列表", () => {
+        const config = syncConfigWithChannels(structuredClone(defaultConfig), [createModelChannel({ id: "default", models: ["gpt-image-2"] })]);
+
+        expect(config.models).toEqual(defaultConfig.channelMode === "remote" ? [] : ["default::gpt-image-2"]);
     });
 });

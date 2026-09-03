@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { requestStructuredText } from "@/services/api/image";
-import { defaultConfig } from "@/stores/use-config-store";
+import { createModelChannel, defaultConfig, syncConfigWithChannels } from "@/stores/use-config-store";
 
 afterEach(() => {
     vi.unstubAllGlobals();
@@ -18,12 +18,8 @@ describe("结构化文本流式响应", () => {
             `data: ${JSON.stringify({ type: "response.completed", response: { output: [] } })}`,
         ].join("\n\n");
         vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(stream, { status: 200, headers: { "Content-Type": "text/event-stream" } })));
-        const config = {
-            ...defaultConfig,
-            model: "gpt-test",
-            textModel: "gpt-test",
-            channels: [{ id: "test", name: "测试", baseUrl: "https://example.com/v1", apiKey: "test-key", apiFormat: "openai" as const, models: ["gpt-test"] }],
-        };
+        const channels = [createModelChannel({ id: "test", name: "测试", baseUrl: "https://example.com/v1", apiKey: "test-key", apiFormat: "openai", models: ["gpt-test"] })];
+        const config = syncConfigWithChannels({ ...defaultConfig, channelMode: "local", model: "test::gpt-test", textModel: "test::gpt-test" }, channels);
 
         const result = await requestStructuredText<{ items: Array<{ title: string; content: string }> }>(config, [{ role: "user", content: "测试" }], {
             name: "create_thinking_nodes",

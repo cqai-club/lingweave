@@ -5,7 +5,7 @@ description: 前端优先的本地开发方式
 
 # 本地开发
 
-当前主应用以 `web/` 前端为主，AI 请求由浏览器前台直连用户自己的 OpenAI 兼容接口。
+当前主应用以 `web/` 前端为主；启用账号服务模式时，AI 请求由浏览器携带 Logto Access Token 调用 Account Service，再由服务端转发到 NewAPI。未配置账号服务时仍可使用浏览器本地渠道。
 
 ## 1. 启动前端
 
@@ -21,21 +21,34 @@ bun run dev
 http://localhost:3000
 ```
 
-开发服务器默认将 `/api` 和 `/v1` 代理到 `https://niffler.org`。需要调试其他 Niffler 环境时，新建 `web/.env.local`：
+如需启用 CQ AI Club 登录，在 Logto 控制台创建单页应用，并新建 `web/.env.local`：
 
 ```bash
-NIFFLER_PROXY_TARGET=https://your-niffler.example.com
+VITE_LOGTO_APP_ID=你的单页应用AppID
+VITE_LOGTO_ENDPOINT=https://auth.cqaiclub.asia
+VITE_LOGTO_API_RESOURCE=https://account.cqaiclub.asia
+VITE_LOGTO_API_SCOPES=ai:invoke
+VITE_ACCOUNT_SERVICE_URL=http://localhost:8787
+VITE_NEW_API_URL=https://relay.cqaiclub.asia
 ```
 
-生产构建不使用这个开发代理。生产环境需要在构建时设置 `VITE_NIFFLER_ORIGIN`；留空会关闭 Niffler 登录入口和默认地址，GitHub Pages 当前采用该模式。
+Logto 应用需要登记登录回调 `http://localhost:3000/callback` 和退出后重定向 `http://localhost:3000/`。`VITE_LOGTO_APP_ID` 留空时隐藏登录入口；浏览器前端不需要也不能配置 App Secret。
+
+同时配置 `VITE_LOGTO_APP_ID`、`VITE_LOGTO_API_RESOURCE` 与 `VITE_ACCOUNT_SERVICE_URL` 后，前端会启用账号服务模式：登录取得的 Access Token 发给 Account Service，由它校验身份、按 Client ID 映射应用并代理 NewAPI。只设置 App ID 时仍然只是登录，不会自动取得 AI 模型或额度。
+
+登录后的账户菜单会显示账号服务返回的剩余额度，并链接到 NewAPI 控制台和钱包充值页。NewAPI 控制台地址由 `VITE_NEW_API_URL` 配置，默认是 `https://relay.cqaiclub.asia`；Logto 登录不代表已经建立了 NewAPI 控制台会话。
+
+GitHub Pages 构建从仓库 Actions Variables 读取 `VITE_LOGTO_APP_ID`、`VITE_LOGTO_API_RESOURCE`、`VITE_LOGTO_API_SCOPES`、`VITE_ACCOUNT_SERVICE_URL` 和 `VITE_PROMPT_LIBRARY_URL`。当前仓库站点需要在 Logto 登记登录回调 `https://g-dxw.github.io/lingweave/callback` 和退出后重定向 `https://g-dxw.github.io/lingweave/`；Vercel 或其他域名按同样规则登记，并把前端 Origin 加入 Account Service 的 `CORS_ALLOWED_ORIGINS`。
 
 ## 2. 配置模型
 
-本地开发可登录 Niffler 并选择账号中的 API Key 和模型；未登录或生产环境没有启用 Niffler 时，在配置中填写自己的 `Base URL` 和 `API Key`。WebDAV 仍由浏览器前端直连。
+账号服务模式下登录后直接点击“拉取模型”，模型请求会走 Account Service 的 `/v1/models`；本地回退模式下再填写自己的 `Base URL` 和 `API Key`。WebDAV 仍由浏览器前端直连。
+
+OpenAI 渠道的“文本调用协议”在“API 配置”中按渠道单独选择：上游提供 `/v1/chat/completions` 时选择 Chat Completions，提供 `/v1/responses` 时选择 Responses；账号服务默认使用 Chat Completions。
 
 ## 3. 同步提示词库
 
-`bun run dev` 和生产构建会先检查 `web/public/prompt-library/`。本地没有提示词库时，会优先下载当前版本 GitHub Release 中的资源包；资源包不可用时才从上游同步提示词和封面。如需主动更新：
+`bun run dev` 和生产构建会先检查 `web/public/prompt-library/`。本地没有提示词库时，会优先下载当前版本 GitHub Release 中的资源包；资源包不可用时从上游同步文本索引并跳过不可稳定访问的封面。如需主动更新本地资源：
 
 ```bash
 cd web
@@ -43,6 +56,21 @@ npm run sync:prompts
 ```
 
 再次同步会复用已经下载的图片；需要重新下载全部封面时执行 `npm run sync:prompts -- --force`。`web/public/prompt-library/` 不提交到 Git，版本标签发布时由 GitHub Actions 生成 `prompt-library.tar.gz` 并上传到对应 Release。
+
+如需把封面和索引发布到 Cloudinary，在仅本地使用且已被 Git 忽略的 `web/.env.cloudinary.local` 中配置：
+
+```bash
+CLOUDINARY_CLOUD_NAME=你的CloudName
+CLOUDINARY_API_KEY=你的ApiKey
+CLOUDINARY_API_SECRET=你的ApiSecret
+CLOUDINARY_FOLDER=lingweave/prompt-library
+```
+
+然后执行 `npm run sync:prompts:cloudinary`。上传脚本使用固定哈希 ID、跳过失效封面，并在图片处理完后发布 `index.json`。API Secret 不得使用 `VITE_` 前缀；前端和部署环境只需配置公开索引地址：
+
+```bash
+VITE_PROMPT_LIBRARY_URL=https://res.cloudinary.com/<CloudName>/raw/upload/lingweave/prompt-library/index.json
+```
 
 ## 4. 编译并映射文档
 

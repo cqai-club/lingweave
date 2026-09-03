@@ -9,7 +9,7 @@ description: 用最少步骤把 LingWeave 跑起来
 
 ## Vercel 部署
 
-在 Vercel 中导入仓库即可，根目录 `vercel.json` 会构建 `web/`。当前版本的 AI 请求由浏览器前台直连用户自己的 OpenAI 兼容地址，不需要额外配置服务端。
+在 Vercel 中导入仓库即可，根目录 `vercel.json` 会构建 `web/`。如果使用 CQ AI Club 账号服务模式，需要在 Vercel 项目中配置下方 `VITE_*` 构建变量，并将 Vercel 域名加入 Logto 回调地址和 Account Service 的 CORS 白名单。
 
 ## 本地启动
 
@@ -38,12 +38,12 @@ docker run --rm -p 3000:3000 lingweave
 
 ## 首次使用建议
 
-- 当前环境启用了 Niffler：登录后打开右上角配置，选择账号中的 API Key，再按生成类型选择默认模型。
-- 未登录：打开右上角配置，填写自己的 `Base URL` 和 `API Key`，点击“拉取模型”，再到“模型”中选择默认模型。
+- 账号服务模式下，从顶部账户入口登录 CQ AI Club，打开“配置”点击“拉取模型”，再到“模型”中选择默认模型。
+- 未启用账号服务模式时，打开“配置”填写自己的 `Base URL` 和 `API Key`，再拉取并选择默认模型。
 - 如果需要提示词仓库内容，打开 `/prompts` 会由浏览器前端直连拉取并缓存到 IndexedDB。
 - 如果需要跨设备同步画布、素材和生成记录，可在配置弹窗中填写 WebDAV。
 
 ## 说明
 
 - 当前画布项目和“我的素材”主要保存在浏览器本地，WebDAV 同步需要用户自行配置。
-- 未登录时，AI API Key 保存在浏览器本地；登录 Niffler 后，账号 Key 只保留在当前页面运行内存。本地开发的 Niffler 请求通过 Vite 代理，其他兼容接口由浏览器前端直接请求。
+- 账号服务模式下，浏览器使用 Logto Access Token 请求 Account Service，由服务端代理 NewAPI；本地回退模式下，AI API Key 保存在浏览器本地并由前端直接请求兼容接口。

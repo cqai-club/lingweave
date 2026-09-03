@@ -17,6 +17,21 @@ description: 使用 Render 部署 LingWeave
 
 部署完成后，打开 Render 分配的 `.onrender.com` 域名即可访问。
 
+## 启用登录和账号服务
+
+在 Render 服务的 Environment 中配置以下构建变量，然后手动触发一次重新部署：
+
+```text
+VITE_LOGTO_APP_ID=你的Logto单页应用AppID
+VITE_LOGTO_ENDPOINT=https://auth.cqaiclub.asia
+VITE_LOGTO_API_RESOURCE=https://account.cqaiclub.asia
+VITE_LOGTO_API_SCOPES=ai:invoke
+VITE_ACCOUNT_SERVICE_URL=https://account.cqaiclub.asia
+VITE_PROMPT_LIBRARY_URL=可选的Cloudinary公开index.json地址
+```
+
+这些值会在 Docker 构建时写入静态前端，修改后必须重新部署。Logto 控制台需要登记实际 Render 域名的 `/callback` 和退出后重定向地址；Account Service 的 `CORS_ALLOWED_ORIGINS` 也要加入该域名的 Origin。不要把 App Secret、NewAPI 管理员 Token 或 `NEW_API_INTERNAL_TOKEN` 填入前端变量。
+
 ## 免费版说明
 
 默认使用 Render 免费 Web Service：

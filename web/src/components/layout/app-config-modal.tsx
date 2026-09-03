@@ -1,16 +1,30 @@
 import { App, Button, Form, Input, Modal, Progress, Select, Switch, Tabs } from "antd";
-import { CircleAlert, Cloud, HardDrive, KeyRound, Link2, LogIn, Plus, RefreshCw, ShieldCheck, Trash2, Wifi } from "lucide-react";
+import { CircleAlert, Cloud, HardDrive, KeyRound, Link2, Plus, RefreshCw, ShieldCheck, Trash2, Wifi } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { ModelPicker } from "@/components/model-picker";
-import { NIFFLER_ENABLED } from "@/constant/niffler";
 import { fetchChannelModels } from "@/services/api/image";
 import { syncAppDataToWebdav, type AppSyncDomainKey, type AppSyncProgressEvent } from "@/services/app-sync";
 import { testWebdavConnection, WEBDAV_MANIFEST_FILE_NAME } from "@/services/webdav-sync";
 import { audioFormatOptions, audioVoiceOptions, normalizeAudioSpeedValue } from "@/lib/audio-generation";
 import { useAgentStore } from "@/stores/use-agent-store";
-import { createModelChannel, defaultBaseUrlForApiFormat, filterModelsByCapability, modelOptionLabel, modelOptionsFromChannels, normalizeModelOptionValue, useConfigStore, useEffectiveConfig, type AiConfig, type ApiCallFormat, type ConfigTabKey, type ModelCapability, type ModelChannel } from "@/stores/use-config-store";
-import { useNifflerStore } from "@/stores/use-niffler-store";
+import {
+    createModelChannel,
+    defaultBaseUrlForApiFormat,
+    filterModelsByCapability,
+    modelMatchesCapability,
+    modelOptionLabel,
+    normalizeModelOptionValue,
+    syncConfigWithChannels,
+    useConfigStore,
+    useEffectiveConfig,
+    type AiConfig,
+    type ApiCallFormat,
+    type ConfigTabKey,
+    type ModelCapability,
+    type ModelChannel,
+    type OpenAIProtocol,
+} from "@/stores/use-config-store";
 
 type ModelGroup = {
     capability: ModelCapability;
@@ -40,6 +54,10 @@ const modelGroups: ModelGroup[] = [
 const apiFormatOptions: Array<{ label: string; value: ApiCallFormat }> = [
     { label: "OpenAI", value: "openai" },
     { label: "Gemini", value: "gemini" },
+];
+const openAIProtocolOptions: Array<{ label: string; value: OpenAIProtocol }> = [
+    { label: "Chat Completions（/v1/chat/completions）", value: "chat-completions" },
+    { label: "Responses（/v1/responses）", value: "responses" },
 ];
 
 const webdavDomainKeys: AppSyncDomainKey[] = ["canvas", "assets", "image-workbench", "video-workbench"];
@@ -82,11 +100,6 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     const shouldPromptContinue = useConfigStore((state) => state.shouldPromptContinue);
     const setConfigDialogOpen = useConfigStore((state) => state.setConfigDialogOpen);
     const clearPromptContinue = useConfigStore((state) => state.clearPromptContinue);
-    const session = useNifflerStore((state) => state.session);
-    const runtime = useNifflerStore((state) => state.runtime);
-    const selectingKey = useNifflerStore((state) => state.selectingKey);
-    const selectApiKey = useNifflerStore((state) => state.selectApiKey);
-    const setLoginOpen = useNifflerStore((state) => state.setLoginOpen);
     const agentUrl = useAgentStore((state) => state.url);
     const agentToken = useAgentStore((state) => state.token);
     const agentConnected = useAgentStore((state) => state.connected);
@@ -99,6 +112,7 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     const disconnectAgent = useAgentStore((state) => state.disconnectAgent);
     const modelOptions = config.models.map((model) => ({ label: modelOptionLabel(config, model), value: model }));
     const webdavReady = Boolean(webdav.url.trim());
+    const accountMode = config.channelMode === "remote";
     useEffect(() => setActiveTab(initialTab), [initialTab]);
 
     const refreshStorageEstimate = async () => {
@@ -121,7 +135,7 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     };
 
     const finishConfig = () => {
-        const ready = Boolean(runtime) || config.channels.some((channel) => channel.baseUrl.trim() && channel.apiKey.trim() && channel.models.length);
+        const ready = accountMode ? config.channels.some((channel) => channel.models.length) : config.channels.some((channel) => channel.baseUrl.trim() && channel.apiKey.trim() && channel.models.length);
         setConfigDialogOpen(false);
         if (!ready) return;
         message.success(shouldPromptContinue ? "配置已保存，请继续刚才的请求" : "配置已保存");
@@ -129,7 +143,7 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     };
 
     const updateChannels = (channels: ModelChannel[]) => {
-        const nextConfig = withChannels(config, channels);
+        const nextConfig = syncConfigWithChannels(config, channels);
         saveConfig(nextConfig);
     };
 
@@ -155,14 +169,14 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     };
 
     const refreshChannelModels = async (channel: ModelChannel) => {
-        if (!channel.baseUrl.trim() || !channel.apiKey.trim()) {
+        if (!accountMode && (!channel.baseUrl.trim() || !channel.apiKey.trim())) {
             message.error("请先填写该渠道的 Base URL 和 API Key");
             return;
         }
         setLoadingChannelId(channel.id);
         try {
-            const models = await fetchChannelModels(channel);
-            updateChannels(config.channels.map((item) => (item.id === channel.id ? { ...item, models } : item)));
+            const models = await fetchChannelModels(channel, config.channelMode);
+            updateChannels(config.channels.map((item) => (item.id === channel.id ? { ...item, models, modelsLoaded: true } : item)));
             message.success(`${channel.name} 模型列表已更新`);
         } catch (error) {
             message.error(error instanceof Error ? error.message : "读取模型失败");
@@ -172,16 +186,16 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     };
 
     const refreshAllModels = async () => {
-        const runnable = config.channels.filter((channel) => channel.baseUrl.trim() && channel.apiKey.trim());
+        const runnable = accountMode ? config.channels.slice(0, 1) : config.channels.filter((channel) => channel.baseUrl.trim() && channel.apiKey.trim());
         if (!runnable.length) {
-            message.error("请先填写至少一个渠道的 Base URL 和 API Key");
+            message.error(accountMode ? "缺少默认模型渠道" : "请先填写至少一个渠道的 Base URL 和 API Key");
             return;
         }
         setLoadingChannelId("all");
         try {
-            const entries = await Promise.all(runnable.map(async (channel) => [channel.id, await fetchChannelModels(channel)] as const));
+            const entries = await Promise.all(runnable.map(async (channel) => [channel.id, await fetchChannelModels(channel, config.channelMode)] as const));
             const modelMap = new Map(entries);
-            updateChannels(config.channels.map((channel) => (modelMap.has(channel.id) ? { ...channel, models: modelMap.get(channel.id) || [] } : channel)));
+            updateChannels(config.channels.map((channel) => (modelMap.has(channel.id) ? { ...channel, models: modelMap.get(channel.id) || [], modelsLoaded: true } : channel)));
             message.success("模型列表已更新");
         } catch (error) {
             message.error(error instanceof Error ? error.message : "读取模型失败");
@@ -191,7 +205,8 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     };
 
     const updateCapabilityModels = (group: ModelGroup, models: string[]) => {
-        const next = uniqueModels(models.map((model) => normalizeModelOptionValue(model, config.channels)).filter(Boolean));
+        const available = new Set(filterModelsByCapability(config.models, group.capability));
+        const next = uniqueModels(models.map((model) => normalizeModelOptionValue(model, config.channels)).filter((model) => available.has(model)));
         updateConfig(group.modelsKey, next);
         if (!next.includes(config[group.modelKey])) updateConfig(group.modelKey, next[0] || "");
     };
@@ -263,32 +278,15 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                 items={[
                     {
                         key: "channels",
-                        label: runtime ? "Niffler Key" : "API 配置",
-                        children: runtime && session ? (
-                            <section className="rounded-lg border border-stone-200 p-4 dark:border-stone-800">
-                                <div className="mb-4">
-                                    <div className="text-sm font-semibold">{session.profile.username} 的模型凭证</div>
-                                    <div className="mt-1 text-xs leading-5 text-stone-500">选择本次生成使用的 Niffler API Key。完整密钥只保留在当前页面运行内存，不会写入本地配置。</div>
-                                </div>
-                                <Form layout="vertical" requiredMark={false}>
-                                    <Form.Item label="API Key" className="mb-0">
-                                        <Select
-                                            value={runtime.apiKeyId}
-                                            loading={selectingKey}
-                                            options={runtime.apiKeys.map((key) => ({ label: key.name || "未命名 Key", value: key.id }))}
-                                            onChange={(apiKeyId) => void selectApiKey(apiKeyId).catch((error) => message.error(error instanceof Error ? error.message : "切换 API Key 失败"))}
-                                        />
-                                    </Form.Item>
-                                </Form>
-                            </section>
-                        ) : (
+                        label: "API 配置",
+                        children: (
                             <Form layout="vertical" requiredMark={false}>
                                 <div className="mb-4 flex flex-col items-stretch gap-3 rounded-lg border border-stone-200 p-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between dark:border-stone-800">
                                     <div className="min-w-0 flex-1">
                                         <div className="flex w-full max-w-full flex-wrap items-center gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900 dark:border-amber-700/60 dark:bg-amber-950/30 dark:text-amber-100 sm:w-fit">
-                                            <CircleAlert className="size-3.5 shrink-0" />
-                                            <span className="font-semibold">重要：</span>
-                                            <span>新增或拉取模型后，需要到“模型”Tab 选择可选项才会显示。</span>
+                                            {accountMode ? <Cloud className="size-3.5 shrink-0" /> : <CircleAlert className="size-3.5 shrink-0" />}
+                                            <span className="font-semibold">{accountMode ? "账号服务模式：" : "重要："}</span>
+                                            <span>{accountMode ? "登录后由 CQ AI Club 安全代理 AI 请求，浏览器不会保存平台 API Key。" : "新增或拉取模型后，需要到“模型”Tab 选择可选项才会显示。"}</span>
                                             <Button type="link" size="small" className="h-auto p-0 text-xs font-semibold text-amber-900 dark:text-amber-100" onClick={() => setActiveTab("models")}>
                                                 去模型设置
                                             </Button>
@@ -298,48 +296,73 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                                         <Button className="flex-1 sm:flex-none" icon={<RefreshCw className="size-4" />} loading={Boolean(loadingChannelId)} onClick={() => void refreshAllModels()}>
                                             拉取全部
                                         </Button>
-                                        <Button className="flex-1 sm:flex-none" type="primary" icon={<Plus className="size-4" />} onClick={addChannel}>
-                                            新增渠道
-                                        </Button>
+                                        {!accountMode ? (
+                                            <Button className="flex-1 sm:flex-none" type="primary" icon={<Plus className="size-4" />} onClick={addChannel}>
+                                                新增渠道
+                                            </Button>
+                                        ) : null}
                                     </div>
                                 </div>
                                 <div className="space-y-3">
-                                    {config.channels.map((channel) => (
+                                    {(accountMode ? config.channels.slice(0, 1) : config.channels).map((channel) => (
                                         <section key={channel.id} className="rounded-lg border border-stone-200 p-3 dark:border-stone-800">
                                             <div className="mb-3 flex items-center justify-between gap-3">
                                                 <div className="min-w-0">
-                                                    <div className="truncate text-sm font-semibold">{channel.name || "未命名渠道"}</div>
+                                                    <div className="truncate text-sm font-semibold">{accountMode ? "CQ AI Club 账号服务" : channel.name || "未命名渠道"}</div>
                                                     <div className="mt-1 text-xs text-stone-500">
-                                                        {apiFormatLabel(channel.apiFormat)} · 已保存 {channel.models.length} 个模型
+                                                        {accountMode ? "OpenAI 兼容网关" : apiFormatLabel(channel.apiFormat)} · 已保存 {channel.models.length} 个模型
                                                     </div>
                                                 </div>
                                                 <div className="flex shrink-0 gap-2">
-                                                    {NIFFLER_ENABLED && channel.id === "default" ? (
-                                                        <Button type="primary" size="small" icon={<LogIn className="size-3.5" />} onClick={() => setLoginOpen(true)}>
-                                                            登录 Niffler
-                                                        </Button>
-                                                    ) : null}
                                                     <Button size="small" loading={loadingChannelId === channel.id} onClick={() => void refreshChannelModels(channel)}>
                                                         拉取模型
                                                     </Button>
-                                                    <Button size="small" danger icon={<Trash2 className="size-3.5" />} onClick={() => deleteChannel(channel.id)} />
+                                                    {!accountMode ? <Button size="small" danger icon={<Trash2 className="size-3.5" />} onClick={() => deleteChannel(channel.id)} /> : null}
                                                 </div>
                                             </div>
                                             <div className="grid gap-4 md:grid-cols-2">
-                                                <Form.Item label="渠道名称" className="mb-0">
-                                                    <Input value={channel.name} onChange={(event) => updateChannel(channel.id, { name: event.target.value })} />
-                                                </Form.Item>
-                                                <Form.Item label="调用格式" className="mb-0">
-                                                    <Select value={channel.apiFormat} options={apiFormatOptions} onChange={(value: ApiCallFormat) => updateChannelApiFormat(channel, value)} />
-                                                </Form.Item>
-                                                <Form.Item label="Base URL" className="mb-0">
-                                                    <Input value={channel.baseUrl} onChange={(event) => updateChannel(channel.id, { baseUrl: event.target.value })} />
-                                                </Form.Item>
-                                                <Form.Item label="API Key" className="mb-0">
-                                                    <Input.Password value={channel.apiKey} onChange={(event) => updateChannel(channel.id, { apiKey: event.target.value })} />
-                                                </Form.Item>
-                                                <Form.Item label="模型列表" className="mb-0 md:col-span-2">
-                                                    <Select mode="tags" showSearch allowClear maxTagCount="responsive" placeholder="输入模型名，或点击拉取模型" value={channel.models} onChange={(models) => updateChannel(channel.id, { models })} />
+                                                {!accountMode ? (
+                                                    <>
+                                                        <Form.Item label="渠道名称" className="mb-0">
+                                                            <Input value={channel.name} onChange={(event) => updateChannel(channel.id, { name: event.target.value })} />
+                                                        </Form.Item>
+                                                        <Form.Item label="调用格式" className="mb-0">
+                                                            <Select value={channel.apiFormat} options={apiFormatOptions} onChange={(value: ApiCallFormat) => updateChannelApiFormat(channel, value)} />
+                                                        </Form.Item>
+                                                        {channel.apiFormat === "openai" ? (
+                                                            <Form.Item label="文本调用协议" extra="请按上游支持的接口选择；不同模型如果协议不同，建议拆分到不同渠道。" className="mb-0">
+                                                                <Select value={channel.textProtocol} options={openAIProtocolOptions} onChange={(value: OpenAIProtocol) => updateChannel(channel.id, { textProtocol: value })} />
+                                                            </Form.Item>
+                                                        ) : null}
+                                                        <Form.Item label="Base URL" className="mb-0">
+                                                            <Input value={channel.baseUrl} onChange={(event) => updateChannel(channel.id, { baseUrl: event.target.value })} />
+                                                        </Form.Item>
+                                                        <Form.Item label="API Key" className="mb-0">
+                                                            <Input.Password value={channel.apiKey} onChange={(event) => updateChannel(channel.id, { apiKey: event.target.value })} />
+                                                        </Form.Item>
+                                                    </>
+                                                ) : null}
+                                                {accountMode ? (
+                                                    <Form.Item label="文本调用协议" extra="默认使用 Chat Completions；只有上游明确提供 /v1/responses 时才选择 Responses。" className="mb-0 md:col-span-2">
+                                                        <Select value={channel.textProtocol} options={openAIProtocolOptions} onChange={(value: OpenAIProtocol) => updateChannel(channel.id, { textProtocol: value })} />
+                                                    </Form.Item>
+                                                ) : null}
+                                                <Form.Item
+                                                    label={accountMode ? "已获取模型" : "模型列表"}
+                                                    extra={accountMode ? "账号服务返回的模型只读展示，重新拉取后自动更新。" : "优先点击“拉取模型”；仅当自定义渠道不支持 /v1/models 时手动输入模型 ID。"}
+                                                    className="mb-0 md:col-span-2"
+                                                >
+                                                    <Select
+                                                        mode={accountMode ? "multiple" : "tags"}
+                                                        showSearch
+                                                        allowClear={!accountMode}
+                                                        disabled={accountMode}
+                                                        maxTagCount="responsive"
+                                                        placeholder={accountMode ? "请先登录并拉取模型" : "拉取模型，或手动输入兼容模型 ID"}
+                                                        value={channel.models}
+                                                        options={channel.models.map((model) => ({ label: model, value: model }))}
+                                                        onChange={(models) => updateChannel(channel.id, { models, modelsLoaded: true })}
+                                                    />
                                                 </Form.Item>
                                             </div>
                                         </section>
@@ -354,28 +377,26 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                         children: (
                             <Form layout="vertical" requiredMark={false}>
                                 <div className="mb-4 rounded-lg border border-stone-200 p-3 dark:border-stone-800">
-                                    <div className="text-sm font-semibold">{runtime ? "选择默认模型" : "默认模型和可选项"}</div>
-                                    <div className="mt-1 text-xs leading-5 text-stone-500">{runtime ? "模型来自当前 Niffler 账号，可按生成类型选择默认使用的模型。" : "可选项决定各处下拉框展示哪些模型；同名模型会以括号里的渠道名区分。"}</div>
+                                    <div className="text-sm font-semibold">默认模型和可选项</div>
+                                    <div className="mt-1 text-xs leading-5 text-stone-500">这里只能选择已获取且能力匹配的模型；默认模型必须属于对应可选项。同名模型会以括号里的渠道名区分。</div>
                                 </div>
-                                {!runtime ? (
-                                    <div className="grid gap-4 md:grid-cols-2">
-                                        {modelGroups.map((group) => (
-                                            <Form.Item key={group.modelsKey} label={group.optionsLabel} className="mb-0">
-                                                <Select
-                                                    mode="tags"
-                                                    showSearch
-                                                    allowClear
-                                                    maxTagCount="responsive"
-                                                    placeholder={config.models.length ? `请选择或输入${group.optionsLabel}` : "先到 API 配置里填写或拉取模型"}
-                                                    value={config[group.modelsKey]}
-                                                    options={modelOptions}
-                                                    onChange={(models) => updateCapabilityModels(group, models)}
-                                                />
-                                            </Form.Item>
-                                        ))}
-                                    </div>
-                                ) : null}
-                                <div className={`${runtime ? "" : "mt-4 "}grid gap-4 md:grid-cols-2 xl:grid-cols-4`}>
+                                <div className="grid gap-4 md:grid-cols-2">
+                                    {modelGroups.map((group) => (
+                                        <Form.Item key={group.modelsKey} label={group.optionsLabel} className="mb-0">
+                                            <Select
+                                                mode="multiple"
+                                                showSearch
+                                                allowClear
+                                                maxTagCount="responsive"
+                                                placeholder={config.models.length ? `请选择${group.optionsLabel}` : "先到 API 配置里拉取模型"}
+                                                value={config[group.modelsKey]}
+                                                options={modelOptions.filter((option) => modelMatchesCapability(option.value, group.capability))}
+                                                onChange={(models) => updateCapabilityModels(group, models)}
+                                            />
+                                        </Form.Item>
+                                    ))}
+                                </div>
+                                <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
                                     {modelGroups.map((group) => (
                                         <Form.Item key={group.modelKey} label={group.defaultLabel} className="mb-0">
                                             <ModelPicker config={config} value={config[group.modelKey]} onChange={(model) => updateConfig(group.modelKey, model)} capability={group.capability} fullWidth />
@@ -479,10 +500,15 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                             <section className="rounded-lg border border-stone-200 p-4 dark:border-stone-800">
                                 <div className="mb-4 flex items-start justify-between gap-3">
                                     <div>
-                                        <div className="flex items-center gap-2 text-sm font-semibold"><HardDrive className="size-4" />浏览器本地存储用量</div>
+                                        <div className="flex items-center gap-2 text-sm font-semibold">
+                                            <HardDrive className="size-4" />
+                                            浏览器本地存储用量
+                                        </div>
                                         <div className="mt-1 text-xs leading-5 text-stone-500">画布、我的素材、图片和媒体文件目前默认保存在当前浏览器，不代表云端同步容量。</div>
                                     </div>
-                                    <Button size="small" icon={<RefreshCw className="size-3.5" />} loading={loadingStorage} onClick={() => void refreshStorageEstimate()}>刷新</Button>
+                                    <Button size="small" icon={<RefreshCw className="size-3.5" />} loading={loadingStorage} onClick={() => void refreshStorageEstimate()}>
+                                        刷新
+                                    </Button>
                                 </div>
                                 {storageEstimate ? (
                                     <>
@@ -493,9 +519,21 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                                         </div>
                                         <Progress className="mt-4" percent={storageEstimate.quota ? Math.min(100, Math.round((storageEstimate.usage / storageEstimate.quota) * 100)) : 0} format={(percent) => `${percent || 0}%`} />
                                     </>
-                                ) : <div className="text-sm text-stone-500">正在读取浏览器存储信息…</div>}
+                                ) : (
+                                    <div className="text-sm text-stone-500">正在读取浏览器存储信息…</div>
+                                )}
                                 <div className="mt-4 grid gap-2 text-xs text-stone-500 sm:grid-cols-2">
-                                    {[["画布", "项目和节点"], ["我的素材", "图片、视频、音频"], ["生图工作台", "生成记录和参考图"], ["视频创作台", "生成记录和参考媒体"]].map(([label, detail]) => <div key={label} className="rounded-md border border-stone-200 px-3 py-2 dark:border-stone-800"><span className="font-medium text-stone-700 dark:text-stone-200">{label}</span><span className="ml-2">{detail}</span></div>)}
+                                    {[
+                                        ["画布", "项目和节点"],
+                                        ["我的素材", "图片、视频、音频"],
+                                        ["生图工作台", "生成记录和参考图"],
+                                        ["视频创作台", "生成记录和参考媒体"],
+                                    ].map(([label, detail]) => (
+                                        <div key={label} className="rounded-md border border-stone-200 px-3 py-2 dark:border-stone-800">
+                                            <span className="font-medium text-stone-700 dark:text-stone-200">{label}</span>
+                                            <span className="ml-2">{detail}</span>
+                                        </div>
+                                    ))}
                                 </div>
                             </section>
                         ),
@@ -538,7 +576,12 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
                                             <Input prefix={<Link2 className="mr-1 size-4 text-stone-400" />} value={agentUrl} placeholder="http://127.0.0.1:17371" onChange={(event) => updateAgentConfig({ url: event.target.value })} />
                                         </Form.Item>
                                         <Form.Item label="Connect token" className="mb-4">
-                                            <Input.Password prefix={<KeyRound className="mr-1 size-4 text-stone-400" />} value={agentToken} placeholder="自动发现，或手动填入 Connect token" onChange={(event) => updateAgentConfig({ token: event.target.value })} />
+                                            <Input.Password
+                                                prefix={<KeyRound className="mr-1 size-4 text-stone-400" />}
+                                                value={agentToken}
+                                                placeholder="自动发现，或手动填入 Connect token"
+                                                onChange={(event) => updateAgentConfig({ token: event.target.value })}
+                                            />
                                         </Form.Item>
                                     </div>
                                     {agentConnectError ? <div className="mb-3 rounded-md border border-red-200 px-3 py-2 text-xs text-red-600 dark:border-red-900/60">{agentConnectError}</div> : null}
@@ -577,14 +620,14 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
 export function AppConfigModal() {
     const isConfigOpen = useConfigStore((state) => state.isConfigOpen);
     const configTab = useConfigStore((state) => state.configTab);
+    const accountMode = useConfigStore((state) => state.config.channelMode === "remote");
     const setConfigDialogOpen = useConfigStore((state) => state.setConfigDialogOpen);
-    const runtime = useNifflerStore((state) => state.runtime);
     return (
         <Modal
             title={
                 <div>
                     <div className="text-lg font-semibold">配置与用户偏好</div>
-                    <div className="mt-1 text-xs font-normal text-stone-500">{runtime ? "选择 Niffler Key、模型和生成偏好" : "配置 Base URL、API Key，拉取并选择模型"}</div>
+                    <div className="mt-1 text-xs font-normal text-stone-500">{accountMode ? "登录后从 CQ AI Club 账号服务拉取并选择模型" : "配置 Base URL、API Key，拉取并选择模型"}</div>
                 </div>
             }
             open={isConfigOpen}
@@ -597,41 +640,6 @@ export function AppConfigModal() {
             <AppConfigPanel showDoneButton initialTab={configTab} />
         </Modal>
     );
-}
-
-function withChannels(config: AiConfig, channels: ModelChannel[]): AiConfig {
-    const models = modelOptionsFromChannels(channels);
-    const imageModels = keepOrSuggest(config.imageModels, filterModelsByCapability(models, "image"), models);
-    const videoModels = keepOrSuggest(config.videoModels, filterModelsByCapability(models, "video"), models);
-    const textModels = keepOrSuggest(config.textModels, filterModelsByCapability(models, "text"), models);
-    const audioModels = keepOrSuggest(config.audioModels, filterModelsByCapability(models, "audio"), models);
-    return {
-        ...config,
-        channels,
-        models,
-        baseUrl: channels[0]?.baseUrl || config.baseUrl,
-        apiKey: channels[0]?.apiKey || config.apiKey,
-        apiFormat: channels[0]?.apiFormat || config.apiFormat,
-        imageModels,
-        videoModels,
-        textModels,
-        audioModels,
-        imageModel: normalizeDefaultModel(config.imageModel, imageModels),
-        videoModel: normalizeDefaultModel(config.videoModel, videoModels),
-        textModel: normalizeDefaultModel(config.textModel, textModels),
-        audioModel: normalizeDefaultModel(config.audioModel, audioModels),
-    };
-}
-
-function keepOrSuggest(current: string[], suggested: string[], allModels: string[]) {
-    const available = new Set(allModels);
-    const kept = uniqueModels(current).filter((model) => available.has(model));
-    return kept.length ? kept : suggested;
-}
-
-function normalizeDefaultModel(value: string, options: string[]) {
-    if (options.includes(value)) return value;
-    return options[0] || value;
 }
 
 function normalizeImageCount(value: string) {
@@ -700,5 +708,10 @@ function formatBytes(bytes: number) {
 }
 
 function StorageMetric({ label, value }: { label: string; value: string }) {
-    return <div className="rounded-md border border-stone-200 px-3 py-2 dark:border-stone-800"><div className="text-xs text-stone-500">{label}</div><div className="mt-1 text-sm font-semibold">{value}</div></div>;
+    return (
+        <div className="rounded-md border border-stone-200 px-3 py-2 dark:border-stone-800">
+            <div className="text-xs text-stone-500">{label}</div>
+            <div className="mt-1 text-sm font-semibold">{value}</div>
+        </div>
+    );
 }

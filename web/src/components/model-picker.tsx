@@ -3,7 +3,6 @@ import { Cpu } from "lucide-react";
 
 import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { NIFFLER_CHANNEL_ID } from "@/services/api/niffler";
 import { modelOptionLabel, modelOptionName, selectableModelsByCapability, type AiConfig, type ModelCapability } from "@/stores/use-config-store";
 
 type ModelPickerProps = {
@@ -20,8 +19,11 @@ type ModelPickerProps = {
 export function ModelPicker({ config, value, onChange, capability, className, fullWidth = false, placeholder = "选择模型", onMissingConfig }: ModelPickerProps) {
     const pickerId = useId();
     const [open, setOpen] = useState(false);
-    const options = useMemo(() => Array.from(new Set([...(config.channelMode === "local" && !capability ? [value] : []), ...selectableModelsByCapability(config, capability)].filter((model): model is string => Boolean(model)))), [capability, config, value]);
-    const current = value || "";
+    const options = useMemo(
+        () => Array.from(new Set([...(config.channelMode === "local" && !capability ? [value] : []), ...selectableModelsByCapability(config, capability)].filter((model): model is string => Boolean(model)))),
+        [capability, config, value],
+    );
+    const current = value && options.includes(value) ? value : "";
 
     useEffect(() => {
         const closeOtherPicker = (event: Event) => {
@@ -36,7 +38,7 @@ export function ModelPicker({ config, value, onChange, capability, className, fu
             open={open}
             value={current}
             onOpenChange={(nextOpen) => {
-                if (nextOpen && !options.length && config.channelMode === "local") onMissingConfig?.();
+                if (nextOpen && !options.length) onMissingConfig?.();
                 if (nextOpen) window.dispatchEvent(new CustomEvent("model-picker-open", { detail: pickerId }));
                 setOpen(nextOpen);
             }}
@@ -84,7 +86,6 @@ export function ModelPicker({ config, value, onChange, capability, className, fu
 
 function emptyModelLabel(config: AiConfig, capability?: ModelCapability) {
     const label = capability === "image" ? "生图" : capability === "video" ? "视频" : capability === "text" ? "文本" : capability === "audio" ? "音频" : "";
-    if (config.channels.some((channel) => channel.id === NIFFLER_CHANNEL_ID)) return `Niffler 暂无可用的${label}模型`;
     if (capability && config.models.length) return "请先在上方配置可选模型";
     return config.models.length ? `暂无匹配的${label}模型` : "请先到配置里添加渠道和模型";
 }
@@ -105,7 +106,20 @@ function ModelIcon({ model }: { model: string }) {
 
 function resolveModelIcon(model: string) {
     const name = model.toLowerCase();
-    const icon = name.includes("claude") || name.includes("anthropic") ? "claude" : name.includes("gemini") || name.includes("google") ? "gemini" : name.includes("gpt") || name.includes("openai") ? "openai" : name.includes("grok") ? "grok" : name.includes("deepseek") ? "deepseek" : name.includes("glm") ? "glm" : "";
+    const icon =
+        name.includes("claude") || name.includes("anthropic")
+            ? "claude"
+            : name.includes("gemini") || name.includes("google")
+              ? "gemini"
+              : name.includes("gpt") || name.includes("openai")
+                ? "openai"
+                : name.includes("grok")
+                  ? "grok"
+                  : name.includes("deepseek")
+                    ? "deepseek"
+                    : name.includes("glm")
+                      ? "glm"
+                      : "";
     if (icon) return `${import.meta.env.BASE_URL}icons/${icon}.svg`;
     return "";
 }

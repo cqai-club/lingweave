@@ -8,3 +8,17 @@ services:
     envVars:
       - key: PORT
         value: 3000
+      # Render Docker builds read these values from the service environment.
+      # Set them in the Render dashboard before the first production build.
+      - key: VITE_LOGTO_APP_ID
+        sync: false
+      - key: VITE_LOGTO_ENDPOINT
+        value: https://auth.cqaiclub.asia
+      - key: VITE_LOGTO_API_RESOURCE
+        sync: false
+      - key: VITE_LOGTO_API_SCOPES
+        value: ai:invoke
+      - key: VITE_ACCOUNT_SERVICE_URL
+        sync: false
+      - key: VITE_PROMPT_LIBRARY_URL
+        sync: false

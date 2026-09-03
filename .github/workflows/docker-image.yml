@@ -57,6 +57,13 @@ jobs:
           context: .
           platforms: ${{ matrix.platform }}
           labels: ${{ needs.meta.outputs.labels }}
+          build-args: |
+            VITE_LOGTO_APP_ID=${{ vars.VITE_LOGTO_APP_ID }}
+            VITE_LOGTO_ENDPOINT=https://auth.cqaiclub.asia
+            VITE_LOGTO_API_RESOURCE=${{ vars.VITE_LOGTO_API_RESOURCE }}
+            VITE_LOGTO_API_SCOPES=${{ vars.VITE_LOGTO_API_SCOPES }}
+            VITE_ACCOUNT_SERVICE_URL=${{ vars.VITE_ACCOUNT_SERVICE_URL }}
+            VITE_PROMPT_LIBRARY_URL=${{ vars.VITE_PROMPT_LIBRARY_URL }}
           outputs: type=image,name=${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=app-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=app-${{ matrix.arch }}

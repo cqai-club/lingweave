@@ -2,6 +2,8 @@ import { ArrowRight, Check, CircleHelp, FileText, FolderPlus, ImagePlus, Link2, 
 import { Button } from "antd";
 import { useNavigate } from "react-router-dom";
 
+import { ACCOUNT_SERVICE_ENABLED } from "@/constant/logto";
+
 const quickSteps = [
     { number: "01", title: "添加文本", description: "从底部工具栏添加一个文本节点，双击节点写下你想生成的画面。", icon: FileText },
     { number: "02", title: "点击生图", description: "点击文本节点右上角的“生图”，画布会自动创建并连接生成配置。", icon: ImagePlus },
@@ -15,7 +17,7 @@ const afterGeneration = [
 ] as const;
 
 const questions = [
-    { question: "模型列表是空的？", answer: "先到“配置”登录 Niffler 并选择 API Key；未登录时也可以填写自己的 API Key，然后拉取模型。" },
+    { question: "模型列表是空的？", answer: ACCOUNT_SERVICE_ENABLED ? "先登录 CQ AI Club，再到“配置”点击拉取模型；如果仍为空，请检查 Account Service 的模型和额度配置。" : "先到“配置”填写 Base URL 和 API Key，再点击拉取模型。" },
     { question: "“开始生成”按钮不可用？", answer: "确认生成配置已经连接文本节点，或在“组装提示词”中直接输入内容。" },
     { question: "怎样让下一张保持一致？", answer: "不要只复制提示词，把上一张结果直接连到新的生成配置节点作为参考图。" },
     { question: "刷新后画布会丢吗？", answer: "画布项目默认保存在当前浏览器本地。需要换设备时，请导出画布或自行配置 WebDAV。" },
@@ -64,7 +66,7 @@ export default function GuidePage() {
                     <div className="lg:sticky lg:top-20 lg:self-start">
                         <div className="text-sm font-medium text-stone-500">开始前</div>
                         <h2 className="mt-3 text-3xl font-semibold tracking-[-0.035em]">先确认模型可用</h2>
-                        <p className="mt-5 text-sm leading-7 text-stone-500 dark:text-stone-400">登录 Niffler 后选择账号中的 API Key 和生图模型即可。你也可以不登录，直接使用自己的 API Key。</p>
+                        <p className="mt-5 text-sm leading-7 text-stone-500 dark:text-stone-400">{ACCOUNT_SERVICE_ENABLED ? "登录 CQ AI Club 后拉取账号服务提供的模型，再选择生图模型。平台 API Key 不会进入浏览器。" : "填写自己的 Base URL 和 API Key，拉取模型后选择生图模型。"}</p>
                         <Button className="mt-6" icon={<Settings2 className="size-4" />} onClick={() => navigate("/config")}>打开配置</Button>
                     </div>
 
@@ -77,7 +79,7 @@ export default function GuidePage() {
                             <Check className="size-5 text-emerald-600 dark:text-emerald-400" />
                         </div>
                         <div className="grid sm:grid-cols-3">
-                            {["API Key 已选择", "生图模型已选择", "模型列表可正常显示"].map((item, index) => (
+                            {(ACCOUNT_SERVICE_ENABLED ? ["CQ AI Club 已登录", "生图模型已选择", "模型列表可正常显示"] : ["API Key 已选择", "生图模型已选择", "模型列表可正常显示"]).map((item, index) => (
                                 <div key={item} className="border-b border-stone-200 p-5 last:border-b-0 sm:border-b-0 sm:border-r sm:last:border-r-0 dark:border-stone-800">
                                     <div className="font-mono text-[11px] text-stone-400">0{index + 1}</div>
                                     <div className="mt-8 text-sm font-medium">{item}</div>

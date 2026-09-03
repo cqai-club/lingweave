@@ -30,7 +30,9 @@ type PromptLibrary = {
     items: Prompt[];
 };
 
-const libraryBaseUrl = `${import.meta.env.BASE_URL}prompt-library`;
+const configuredLibraryUrl = import.meta.env.VITE_PROMPT_LIBRARY_URL?.trim();
+const libraryIndexUrl = configuredLibraryUrl || `${import.meta.env.BASE_URL}prompt-library/index.json`;
+const libraryBaseUrl = configuredLibraryUrl?.replace(/\/index\.json(?:\?.*)?$/, "") || `${import.meta.env.BASE_URL}prompt-library`;
 const categoryOrder = ["人物头像", "产品电商", "海报设计", "品牌营销", "插画艺术", "信息图", "影视分镜", "社交媒体", "UI设计", "图像编辑", "其他"];
 let promptItems: Prompt[] | null = null;
 let loadingPrompts: Promise<Prompt[]> | null = null;
@@ -54,11 +56,12 @@ export async function fetchPrompts({ keyword = "", tag = [], category = ALL_PROM
 async function getPrompts() {
     if (promptItems) return promptItems;
     if (loadingPrompts) return loadingPrompts;
-    loadingPrompts = fetch(`${libraryBaseUrl}/index.json`, { cache: "no-cache" })
+    loadingPrompts = fetch(libraryIndexUrl, { cache: "no-cache" })
         .then(async (response) => {
-            if (!response.ok) throw new Error("本地提示词库不存在，请先执行 npm run sync:prompts");
+            if (!response.ok || !response.headers.get("content-type")?.includes("application/json")) throw new Error("本地提示词库不存在，请先执行 npm run prepare:prompts");
             const library = (await response.json()) as PromptLibrary;
-            promptItems = library.items.map((item) => ({ ...item, coverUrl: item.coverUrl ? `${libraryBaseUrl}/${item.coverUrl}` : "" }));
+            if (!Array.isArray(library.items)) throw new Error("本地提示词库格式无效，请重新执行 npm run prepare:prompts");
+            promptItems = library.items.map((item) => ({ ...item, coverUrl: /^https?:\/\//i.test(item.coverUrl) ? item.coverUrl : item.coverUrl ? `${libraryBaseUrl}/${item.coverUrl}` : "" }));
             return promptItems;
         })
         .finally(() => {

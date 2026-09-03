@@ -5,7 +5,7 @@ import { App, ConfigProvider } from "antd";
 import zhCN from "antd/locale/zh_CN";
 
 import { ClientRootInit } from "@/components/layout/client-root-init";
-import { NifflerGate } from "@/components/layout/niffler-gate";
+import { LogtoAuthProvider } from "@/components/layout/logto-auth-provider";
 import { getAntThemeConfig } from "@/lib/app-theme";
 import { useThemeStore } from "@/stores/use-theme-store";
 
@@ -32,9 +32,9 @@ export function AppProviders({ children }: { children: ReactNode }) {
         <ConfigProvider locale={zhCN} theme={getAntThemeConfig(dark)}>
             <App>
                 <QueryClientProvider client={queryClient}>
-                    <NifflerGate>
+                    <LogtoAuthProvider>
                         <ClientRootInit>{children}</ClientRootInit>
-                    </NifflerGate>
+                    </LogtoAuthProvider>
                 </QueryClientProvider>
             </App>
         </ConfigProvider>
