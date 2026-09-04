@@ -1,7 +1,14 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { describe, expect, it } from "vitest";
 
 import { toLocalUser } from "@/components/layout/logto-auth-provider";
 import { buildAppUrl, buildNewApiUrl } from "@/constant/logto";
+
+function source(path: string) {
+    return readFileSync(resolve(process.cwd(), "src", path), "utf8");
+}
 
 describe("Logto 配置", () => {
     it("按部署子路径生成登录回调和退出地址", () => {
@@ -27,5 +34,11 @@ describe("Logto 配置", () => {
         });
 
         expect(user).toEqual({ id: "user-1", username: "lingweaver", displayName: "灵织用户", avatarUrl: "https://example.com/avatar.png" });
+    });
+
+    it("未登录时只保留文字登录入口", () => {
+        const userStatusActions = source("components/layout/user-status-actions.tsx");
+        expect(userStatusActions).toContain("className={loginClassName}");
+        expect(userStatusActions).toMatch(/>\s*登录\s*<\/button>/);
     });
 });

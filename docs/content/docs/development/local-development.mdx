@@ -38,7 +38,7 @@ Logto 应用需要登记登录回调 `http://localhost:3000/callback` 和退出�
 
 登录后的账户菜单会显示账号服务返回的剩余额度，并链接到 NewAPI 控制台和钱包充值页。NewAPI 控制台地址由 `VITE_NEW_API_URL` 配置，默认是 `https://relay.cqaiclub.asia`；Logto 登录不代表已经建立了 NewAPI 控制台会话。
 
-GitHub Pages 构建从仓库 Actions Variables 读取 `VITE_LOGTO_APP_ID`、`VITE_LOGTO_API_RESOURCE`、`VITE_LOGTO_API_SCOPES`、`VITE_ACCOUNT_SERVICE_URL` 和 `VITE_PROMPT_LIBRARY_URL`。当前仓库站点需要在 Logto 登记登录回调 `https://g-dxw.github.io/lingweave/callback` 和退出后重定向 `https://g-dxw.github.io/lingweave/`；Vercel 或其他域名按同样规则登记，并把前端 Origin 加入 Account Service 的 `CORS_ALLOWED_ORIGINS`。
+GitHub Pages 构建从仓库 Actions Variables 读取 `VITE_LOGTO_APP_ID`、`VITE_LOGTO_API_RESOURCE`、`VITE_LOGTO_API_SCOPES`、`VITE_ACCOUNT_SERVICE_URL` 和 `VITE_PROMPT_LIBRARY_URL`。当前仓库站点需要在 Logto 登记登录回调 `https://cqai-club.github.io/lingweave/callback` 和退出后重定向 `https://cqai-club.github.io/lingweave/`；Vercel 或其他域名按同样规则登记，并把前端 Origin 加入 Account Service 的 `CORS_ALLOWED_ORIGINS`。
 
 ## 2. 配置模型
 

@@ -10,7 +10,7 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: ghcr.io/g-dxw/lingweave
+  IMAGE_NAME: ghcr.io/cqai-club/lingweave
 
 jobs:
   meta:

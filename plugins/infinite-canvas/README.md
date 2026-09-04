@@ -9,7 +9,7 @@
 把下面这段发给 Codex：
 
 ```text
-请从 https://github.com/g-dxw/lingweave.git 安装 LingWeave Codex 插件。
+请从 https://github.com/cqai-club/lingweave.git 安装 LingWeave Codex 插件。
 请 clone 仓库到 ~/plugins/lingweave，确认 plugins/infinite-canvas/.codex-plugin/plugin.json 存在，
 把 plugins/lingweave 加入 personal marketplace，先运行 codex plugin marketplace add ~，
 再运行 codex plugin add infinite-canvas@personal。
@@ -22,7 +22,7 @@
 
 ```bash
 mkdir -p ~/plugins
-git clone https://github.com/g-dxw/lingweave.git ~/plugins/lingweave
+git clone https://github.com/cqai-club/lingweave.git ~/plugins/lingweave
 ```
 
 确保 `~/.agents/plugins/marketplace.json` 中有 LingWeave 条目，注意 `path` 指向仓库里的插件子目录：

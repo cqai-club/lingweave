@@ -9,8 +9,8 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/g-dxw/lingweave"><img src="https://img.shields.io/github/stars/g-dxw/lingweave?style=flat-square&logo=github" alt="GitHub Stars"></a>
-  <a href="https://github.com/g-dxw/lingweave/tags"><img src="https://img.shields.io/github/v/tag/g-dxw/lingweave?style=flat-square&label=version" alt="Version"></a>
+  <a href="https://github.com/cqai-club/lingweave"><img src="https://img.shields.io/github/stars/cqai-club/lingweave?style=flat-square&logo=github" alt="GitHub Stars"></a>
+  <a href="https://github.com/cqai-club/lingweave/tags"><img src="https://img.shields.io/github/v/tag/cqai-club/lingweave?style=flat-square&label=version" alt="Version"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-f97316?style=flat-square" alt="AGPL-3.0 License"></a>
   <a href="https://vite.dev/"><img src="https://img.shields.io/badge/Vite-7-646cff?style=flat-square&logo=vite&logoColor=white" alt="Vite 7"></a>
   <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-149eca?style=flat-square&logo=react&logoColor=white" alt="React 19"></a>
@@ -55,7 +55,7 @@ LingWeave 最初基于 [basketikun/infinite-canvas](https://github.com/basketiku
 需要 Node.js 20.19 或更高版本。
 
 ```bash
-git clone https://github.com/g-dxw/lingweave.git
+git clone https://github.com/cqai-club/lingweave.git
 cd lingweave/web
 npm install
 npm run dev
@@ -93,7 +93,7 @@ npm run sync:prompts
 `docker-compose.yml` 默认使用发布到 GitHub Container Registry 的镜像：
 
 ```bash
-git clone https://github.com/g-dxw/lingweave.git
+git clone https://github.com/cqai-club/lingweave.git
 cd lingweave
 docker compose up -d
 ```

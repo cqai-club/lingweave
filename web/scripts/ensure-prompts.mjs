@@ -29,7 +29,7 @@ if (await isReady(outputDir)) {
 
 async function downloadRelease() {
     const version = (await readFile(resolve(webDir, "../VERSION"), "utf8")).trim();
-    const url = process.env.PROMPT_LIBRARY_URL || `https://github.com/g-dxw/lingweave/releases/download/${version}/prompt-library.tar.gz`;
+    const url = process.env.PROMPT_LIBRARY_URL || `https://github.com/cqai-club/lingweave/releases/download/${version}/prompt-library.tar.gz`;
     const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(120_000) });
     if (!response.ok || !response.body) throw new Error(`${response.status} ${response.statusText}`);
 

@@ -27,6 +27,7 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
     const openConfigDialog = useConfigStore((state) => state.openConfigDialog);
     const canvasTheme = canvasThemes[theme];
     const naturalIconClass = "inline-flex size-7 shrink-0 items-center justify-center text-stone-600 transition hover:text-stone-950 dark:text-stone-300 dark:hover:text-white [&_svg]:size-4";
+    const loginButtonClass = "inline-flex h-7 shrink-0 items-center px-2 text-xs font-medium text-stone-600 transition hover:text-stone-950 dark:text-stone-300 dark:hover:text-white";
     const iconStyle: CSSProperties | undefined = variant === "canvas" ? { color: canvasTheme.node.text } : undefined;
     const versionStyle = iconStyle;
     const gitHubClassName = "size-7 text-base";
@@ -45,7 +46,7 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
             <AnimatedThemeToggler theme={theme} onThemeChange={setTheme} className={naturalIconClass} style={iconStyle} aria-label={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"} title={theme === "dark" ? "切换到浅色主题" : "切换到深色主题"} />
             <VersionReleaseModal style={versionStyle} />
             <GitHubLink className={cn("bg-transparent hover:bg-transparent dark:hover:bg-transparent", gitHubClassName)} style={gitHubStyle} />
-            {LOGTO_ENABLED ? <LogtoAccountAction className={naturalIconClass} style={iconStyle} /> : null}
+            {LOGTO_ENABLED ? <LogtoAccountAction className={naturalIconClass} loginClassName={loginButtonClass} style={iconStyle} /> : null}
             {onOpenShortcuts ? (
                 <button type="button" className={naturalIconClass} style={iconStyle} onClick={onOpenShortcuts} aria-label="快捷键" title="快捷键">
                     <Keyboard className="size-4" />
@@ -55,7 +56,7 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
     );
 }
 
-function LogtoAccountAction({ className, style }: { className: string; style?: CSSProperties }) {
+function LogtoAccountAction({ className, loginClassName, style }: { className: string; loginClassName: string; style?: CSSProperties }) {
     const { isAuthenticated, isLoading, error, signIn, signOut } = useLogto();
     const user = useUserStore((state) => state.user);
     const [accountSummary, setAccountSummary] = useState<{ quota?: number; quotaUsed?: number } | null>(null);
@@ -119,14 +120,14 @@ function LogtoAccountAction({ className, style }: { className: string; style?: C
     return (
         <button
             type="button"
-            className={className}
+            className={loginClassName}
             style={style}
             disabled={isLoading}
             onClick={() => void signIn({ redirectUri: buildAppUrl("callback"), postRedirectUri: window.location.href })}
             aria-label="登录"
             title={error ? `登录失败：${error.message}` : "登录 CQ AI Club"}
         >
-            <CircleUserRound className="size-4" />
+            登录
         </button>
     );
 }
