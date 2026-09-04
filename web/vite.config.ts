@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import react from "@vitejs/plugin-react";
-import { defineConfig, loadEnv, type Plugin } from "vite";
+import { defineConfig, type Plugin } from "vite";
 
 import { parseChangelog } from "./src/lib/release";
 
@@ -41,34 +41,16 @@ function localDocsRoutes(): Plugin {
     };
 }
 
-export default defineConfig(({ mode }) => {
-    const env = loadEnv(mode, webDir, "");
-    const nifflerProxyTarget = (process.env.NIFFLER_PROXY_TARGET || env.NIFFLER_PROXY_TARGET || "https://niffler.org").trim().replace(/\/+$/, "");
-
-    return {
-        base: process.env.VITE_BASE || "/",
-        plugins: [localDocsRoutes(), react()],
-        server: {
-            proxy: {
-                "/api": {
-                    target: nifflerProxyTarget,
-                    changeOrigin: true,
-                    cookieDomainRewrite: "",
-                },
-                "/v1": {
-                    target: nifflerProxyTarget,
-                    changeOrigin: true,
-                },
-            },
+export default defineConfig({
+    base: process.env.VITE_BASE || "/",
+    plugins: [localDocsRoutes(), react()],
+    resolve: {
+        alias: {
+            "@": resolve(webDir, "src"),
         },
-        resolve: {
-            alias: {
-                "@": resolve(webDir, "src"),
-            },
-        },
-        define: {
-            __APP_VERSION__: JSON.stringify(localVersion),
-            __APP_RELEASES__: JSON.stringify(parseChangelog(localChangelog)),
-        },
-    };
+    },
+    define: {
+        __APP_VERSION__: JSON.stringify(localVersion),
+        __APP_RELEASES__: JSON.stringify(parseChangelog(localChangelog)),
+    },
 });

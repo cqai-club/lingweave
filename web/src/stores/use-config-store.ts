@@ -1,13 +1,11 @@
-import { useMemo } from "react";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { nanoid } from "nanoid";
 
-import { NIFFLER_OPENAI_BASE_URL } from "@/constant/niffler";
-import { NIFFLER_CHANNEL_ID, type NifflerRuntime } from "@/services/api/niffler";
-import { useNifflerStore } from "@/stores/use-niffler-store";
+import { ACCOUNT_SERVICE_ENABLED } from "@/constant/logto";
 
 export type ApiCallFormat = "openai" | "gemini";
+export type OpenAIProtocol = "chat-completions" | "responses";
 
 export type ModelChannel = {
     id: string;
@@ -15,7 +13,9 @@ export type ModelChannel = {
     baseUrl: string;
     apiKey: string;
     apiFormat: ApiCallFormat;
+    textProtocol: OpenAIProtocol;
     models: string[];
+    modelsLoaded: boolean;
 };
 
 export type AiConfig = {
@@ -23,6 +23,7 @@ export type AiConfig = {
     baseUrl: string;
     apiKey: string;
     apiFormat: ApiCallFormat;
+    textProtocol: OpenAIProtocol;
     channels: ModelChannel[];
     model: string;
     imageModel: string;
@@ -61,30 +62,33 @@ export type ConfigTabKey = "channels" | "models" | "preferences" | "webdav" | "s
 export const CONFIG_STORE_KEY = "infinite-canvas:ai_config_store";
 export type ModelCapability = "image" | "video" | "text" | "audio";
 const CHANNEL_MODEL_SEPARATOR = "::";
-const NIFFLER_BASE_URL = NIFFLER_OPENAI_BASE_URL;
+const OPENAI_BASE_URL = "";
 const LEGACY_OPENAI_BASE_URL = "https://api.openai.com";
 const GEMINI_BASE_URL = "https://generativelanguage.googleapis.com";
 
 export const defaultConfig: AiConfig = {
-    channelMode: "local",
-    baseUrl: NIFFLER_BASE_URL,
+    channelMode: ACCOUNT_SERVICE_ENABLED ? "remote" : "local",
+    baseUrl: OPENAI_BASE_URL,
     apiKey: "",
     apiFormat: "openai",
+    textProtocol: ACCOUNT_SERVICE_ENABLED ? "chat-completions" : "responses",
     channels: [
         {
             id: "default",
             name: "默认渠道",
-            baseUrl: NIFFLER_BASE_URL,
+            baseUrl: OPENAI_BASE_URL,
             apiKey: "",
             apiFormat: "openai",
-            models: ["gpt-image-2", "grok-imagine-video", "gpt-5.5", "gpt-4o-mini-tts"],
+            textProtocol: ACCOUNT_SERVICE_ENABLED ? "chat-completions" : "responses",
+            models: [],
+            modelsLoaded: false,
         },
     ],
-    model: "default::gpt-image-2",
-    imageModel: "default::gpt-image-2",
-    videoModel: "default::grok-imagine-video",
-    textModel: "default::gpt-5.5",
-    audioModel: "default::gpt-4o-mini-tts",
+    model: "",
+    imageModel: "",
+    videoModel: "",
+    textModel: "",
+    audioModel: "",
     audioVoice: "alloy",
     audioFormat: "mp3",
     audioSpeed: "1",
@@ -94,11 +98,11 @@ export const defaultConfig: AiConfig = {
     videoGenerateAudio: "true",
     videoWatermark: "false",
     systemPrompt: "",
-    models: ["default::gpt-image-2", "default::grok-imagine-video", "default::gpt-5.5", "default::gpt-4o-mini-tts"],
-    imageModels: ["default::gpt-image-2"],
-    videoModels: ["default::grok-imagine-video"],
-    textModels: ["default::gpt-5.5"],
-    audioModels: ["default::gpt-4o-mini-tts"],
+    models: [],
+    imageModels: [],
+    videoModels: [],
+    textModels: [],
+    audioModels: [],
     quality: "auto",
     size: "1:1",
     count: "1",
@@ -113,30 +117,26 @@ export const defaultWebdavSyncConfig: WebdavSyncConfig = {
     lastSyncedAt: "",
 };
 
+export function stripLocalAiCredentials(config: AiConfig): AiConfig {
+    return {
+        ...config,
+        apiKey: "",
+        channels: config.channels.map((channel) => ({ ...channel, apiKey: "" })),
+    };
+}
+
 type ConfigStore = {
     config: AiConfig;
-    nifflerModels: NifflerModelSelection;
     webdav: WebdavSyncConfig;
     isConfigOpen: boolean;
     configTab: ConfigTabKey;
     shouldPromptContinue: boolean;
-    applyNifflerModels: (runtime: NifflerRuntime) => void;
     updateConfig: <K extends keyof AiConfig>(key: K, value: AiConfig[K]) => void;
     updateWebdavConfig: <K extends keyof WebdavSyncConfig>(key: K, value: WebdavSyncConfig[K]) => void;
     isAiConfigReady: (config: AiConfig, model: string) => boolean;
     openConfigDialog: (shouldPromptContinue?: boolean, tab?: ConfigTabKey) => void;
     setConfigDialogOpen: (isOpen: boolean) => void;
     clearPromptContinue: () => void;
-};
-
-type NifflerModelSelection = Pick<AiConfig, "model" | "imageModel" | "videoModel" | "textModel" | "audioModel">;
-
-const emptyNifflerModelSelection: NifflerModelSelection = {
-    model: "",
-    imageModel: "",
-    videoModel: "",
-    textModel: "",
-    audioModel: "",
 };
 
 function isVideoModelName(model: string) {
@@ -146,7 +146,20 @@ function isVideoModelName(model: string) {
 
 function isImageModelName(model: string) {
     const value = modelOptionName(model).toLowerCase();
-    return !isVideoModelName(model) && !isAudioModelName(model) && (value.includes("seedream") || value.includes("gpt-image") || value.includes("image") || value.includes("dall-e") || value.includes("dalle") || value.includes("imagen") || value.includes("flux") || value.includes("sdxl") || value.includes("stable-diffusion") || value.includes("midjourney"));
+    return (
+        !isVideoModelName(model) &&
+        !isAudioModelName(model) &&
+        (value.includes("seedream") ||
+            value.includes("gpt-image") ||
+            value.includes("image") ||
+            value.includes("dall-e") ||
+            value.includes("dalle") ||
+            value.includes("imagen") ||
+            value.includes("flux") ||
+            value.includes("sdxl") ||
+            value.includes("stable-diffusion") ||
+            value.includes("midjourney"))
+    );
 }
 
 function isAudioModelName(model: string) {
@@ -172,7 +185,8 @@ export function filterModelsByCapability(models: string[], capability?: ModelCap
 
 export function selectableModelsByCapability(config: AiConfig, capability?: ModelCapability) {
     if (!capability) return config.models;
-    return config[modelListKey(capability)];
+    const available = new Set(filterModelsByCapability(config.models, capability));
+    return config[modelListKey(capability)].filter((model) => available.has(model));
 }
 
 function modelListKey(capability: ModelCapability) {
@@ -180,6 +194,7 @@ function modelListKey(capability: ModelCapability) {
 }
 
 function isAiConfigReady(config: AiConfig, model: string) {
+    if (config.channelMode === "remote") return Boolean(ACCOUNT_SERVICE_ENABLED && model.trim());
     const channel = resolveModelChannel(config, model);
     return Boolean(model.trim() && channel.baseUrl.trim() && channel.apiKey.trim());
 }
@@ -188,34 +203,11 @@ export const useConfigStore = create<ConfigStore>()(
     persist(
         (set, get) => ({
             config: defaultConfig,
-            nifflerModels: emptyNifflerModelSelection,
             webdav: defaultWebdavSyncConfig,
             isConfigOpen: false,
             configTab: "channels",
             shouldPromptContinue: false,
-            applyNifflerModels: (runtime) =>
-                set((state) => {
-                    const models = encodeNifflerModels(runtime.models);
-                    const imageModels = encodeNifflerModels(runtime.imageModels);
-                    const videoModels = encodeNifflerModels(runtime.videoModels);
-                    const textModels = encodeNifflerModels(runtime.textModels);
-                    const audioModels = encodeNifflerModels(runtime.audioModels);
-                    return {
-                        nifflerModels: {
-                            model: keepModel(state.nifflerModels.model, models),
-                            imageModel: keepModel(state.nifflerModels.imageModel, imageModels),
-                            videoModel: keepModel(state.nifflerModels.videoModel, videoModels),
-                            textModel: keepModel(state.nifflerModels.textModel, textModels),
-                            audioModel: keepModel(state.nifflerModels.audioModel, audioModels),
-                        },
-                    };
-                }),
-            updateConfig: (key, value) =>
-                set((state) =>
-                    useNifflerStore.getState().runtime && isNifflerModelKey(key)
-                        ? { nifflerModels: { ...state.nifflerModels, [key]: value as string } }
-                        : { config: { ...state.config, [key]: value } },
-                ),
+            updateConfig: (key, value) => set((state) => ({ config: { ...state.config, [key]: value } })),
             updateWebdavConfig: (key, value) =>
                 set((state) => ({
                     webdav: {
@@ -230,31 +222,29 @@ export const useConfigStore = create<ConfigStore>()(
         }),
         {
             name: CONFIG_STORE_KEY,
-            partialize: (state) => ({ config: state.config, nifflerModels: state.nifflerModels, webdav: state.webdav }),
+            partialize: (state) => ({
+                config: ACCOUNT_SERVICE_ENABLED ? stripLocalAiCredentials(state.config) : state.config,
+                webdav: state.webdav,
+            }),
             merge: (persisted, current) => {
                 const persistedState = (persisted || {}) as Partial<ConfigStore>;
                 const persistedConfig = (persistedState.config || {}) as Partial<AiConfig>;
-                const persistedNifflerModels = (persistedState.nifflerModels || {}) as Partial<NifflerModelSelection>;
                 const persistedWebdav = (persistedState.webdav || {}) as Partial<WebdavSyncConfig>;
                 const config = { ...defaultConfig, ...persistedConfig };
-                if ((!persistedConfig.baseUrl || persistedConfig.baseUrl === LEGACY_OPENAI_BASE_URL) && !persistedConfig.apiKey) config.baseUrl = NIFFLER_BASE_URL;
+                config.channelMode = ACCOUNT_SERVICE_ENABLED ? "remote" : "local";
+                if ((!persistedConfig.baseUrl || persistedConfig.baseUrl === LEGACY_OPENAI_BASE_URL) && !persistedConfig.apiKey) config.baseUrl = OPENAI_BASE_URL;
                 if (!Array.isArray(persistedConfig.channels)) config.channels = [];
                 const channels = normalizeChannels(config);
-                const models = modelOptionsFromChannels(channels);
-                return {
-                    ...current,
-                    nifflerModels: { ...emptyNifflerModelSelection, ...persistedNifflerModels },
-                    webdav: { ...defaultWebdavSyncConfig, ...persistedWebdav },
-                    config: {
+                const mergedConfig = syncConfigWithChannels(
+                    {
                         ...config,
-                        channelMode: "local",
+                        channelMode: ACCOUNT_SERVICE_ENABLED ? "remote" : "local",
                         apiFormat: normalizeApiFormat(config.apiFormat),
-                        channels,
-                        models,
+                        textProtocol: normalizeTextProtocol(config.textProtocol, ACCOUNT_SERVICE_ENABLED ? "remote" : "local"),
                         imageModel: normalizeModelOptionValue(config.imageModel || config.model, channels),
-                        videoModel: normalizeModelOptionValue(config.videoModel || "grok-imagine-video", channels),
+                        videoModel: normalizeModelOptionValue(config.videoModel, channels),
                         textModel: normalizeModelOptionValue(config.textModel || config.model, channels),
-                        audioModel: normalizeModelOptionValue(config.audioModel || defaultConfig.audioModel, channels),
+                        audioModel: normalizeModelOptionValue(config.audioModel, channels),
                         audioVoice: config.audioVoice || defaultConfig.audioVoice,
                         audioFormat: config.audioFormat || defaultConfig.audioFormat,
                         audioSpeed: config.audioSpeed || defaultConfig.audioSpeed,
@@ -264,34 +254,37 @@ export const useConfigStore = create<ConfigStore>()(
                         videoGenerateAudio: config.videoGenerateAudio || "true",
                         videoWatermark: config.videoWatermark || "false",
                         canvasImageCount: config.canvasImageCount || "3",
-                        imageModels: Array.isArray(persistedConfig.imageModels) ? normalizeModelList(config.imageModels, channels) : filterModelsByCapability(models, "image"),
-                        videoModels: Array.isArray(persistedConfig.videoModels) ? normalizeModelList(config.videoModels, channels) : filterModelsByCapability(models, "video"),
-                        textModels: Array.isArray(persistedConfig.textModels) ? normalizeModelList(config.textModels, channels) : filterModelsByCapability(models, "text"),
-                        audioModels: Array.isArray(persistedConfig.audioModels) ? normalizeModelList(config.audioModels, channels) : filterModelsByCapability(models, "audio"),
+                        imageModels: Array.isArray(persistedConfig.imageModels) ? config.imageModels : [],
+                        videoModels: Array.isArray(persistedConfig.videoModels) ? config.videoModels : [],
+                        textModels: Array.isArray(persistedConfig.textModels) ? config.textModels : [],
+                        audioModels: Array.isArray(persistedConfig.audioModels) ? config.audioModels : [],
                     },
+                    channels,
+                );
+                return {
+                    ...current,
+                    webdav: { ...defaultWebdavSyncConfig, ...persistedWebdav },
+                    config: ACCOUNT_SERVICE_ENABLED ? stripLocalAiCredentials(mergedConfig) : mergedConfig,
                 };
             },
         },
     ),
 );
 
-function normalizeModelList(models: string[], channels: ModelChannel[]) {
+function normalizeModelList(models: string[], channels: ModelChannel[], capability: ModelCapability) {
     const allModelOptions = channels.flatMap((channel) => channel.models.map((model) => encodeChannelModel(channel.id, model)));
+    const available = new Set(filterModelsByCapability(allModelOptions, capability));
     return Array.from(new Set((models || []).map((model) => model.trim()).filter(Boolean)))
         .map((model) => normalizeModelOptionValue(model, channels))
-        .filter((model) => !allModelOptions.length || allModelOptions.includes(model) || !isChannelModelValue(model));
+        .filter((model) => available.has(model));
 }
 
 export function useEffectiveConfig() {
-    const config = useConfigStore((state) => state.config);
-    const nifflerModels = useConfigStore((state) => state.nifflerModels);
-    const runtime = useNifflerStore((state) => state.runtime);
-    return useMemo(() => buildEffectiveConfig(config, nifflerModels, runtime), [config, nifflerModels, runtime]);
+    return useConfigStore((state) => state.config);
 }
 
 export function getEffectiveConfig() {
-    const { config, nifflerModels } = useConfigStore.getState();
-    return buildEffectiveConfig(config, nifflerModels, useNifflerStore.getState().runtime);
+    return useConfigStore.getState().config;
 }
 
 export function createModelChannel(channel?: Partial<ModelChannel>): ModelChannel {
@@ -302,7 +295,9 @@ export function createModelChannel(channel?: Partial<ModelChannel>): ModelChanne
         baseUrl: channel?.baseUrl?.trim() || defaultBaseUrlForApiFormat(apiFormat),
         apiKey: channel?.apiKey || "",
         apiFormat,
+        textProtocol: normalizeTextProtocol(channel?.textProtocol),
         models: uniqueRawModels(channel?.models || []),
+        modelsLoaded: channel?.modelsLoaded === true,
     };
 }
 
@@ -328,7 +323,6 @@ export function modelOptionLabel(config: AiConfig, value: string) {
     const decoded = decodeChannelModel(value);
     if (!decoded) return value;
     const channel = config.channels.find((item) => item.id === decoded.channelId);
-    if (channel?.id === NIFFLER_CHANNEL_ID) return decoded.model;
     return channel ? `${decoded.model}（${channel.name}）` : decoded.model;
 }
 
@@ -355,15 +349,25 @@ export function resolveModelChannel(config: AiConfig, value: string) {
     return matched || config.channels[0] || createModelChannel({ id: "default", name: "默认渠道", baseUrl: config.baseUrl, apiKey: config.apiKey, apiFormat: config.apiFormat, models: config.models.map(modelOptionName) });
 }
 
-export function resolveModelRequestConfig(config: AiConfig, value: string) {
-    const channel = resolveModelChannel(config, value);
+export function resolveModelRequestConfig(config: AiConfig, value: string, capability?: ModelCapability) {
+    const selectedModel = capability ? assertSelectableModel(config, value, capability) : value;
+    const channel = resolveModelChannel(config, selectedModel);
     return {
         ...config,
-        model: modelOptionName(value || config.model),
+        model: modelOptionName(selectedModel || config.model),
         baseUrl: channel.baseUrl,
         apiKey: channel.apiKey,
-        apiFormat: channel.apiFormat,
+        apiFormat: config.channelMode === "remote" ? "openai" : channel.apiFormat,
+        textProtocol: channel.textProtocol,
     };
+}
+
+function assertSelectableModel(config: AiConfig, value: string, capability: ModelCapability) {
+    const model = normalizeModelOptionValue(value, config.channels);
+    const labels: Record<ModelCapability, string> = { image: "生图", video: "视频", text: "文本", audio: "音频" };
+    if (!model || !config.models.includes(model)) throw new Error(`所选${labels[capability]}模型不在已获取的模型列表中，请重新拉取模型`);
+    if (!selectableModelsByCapability(config, capability).includes(model)) throw new Error(`所选模型不支持或未启用${labels[capability]}能力，请重新选择`);
+    return model;
 }
 
 function normalizeChannels(config: AiConfig) {
@@ -373,8 +377,9 @@ function normalizeChannels(config: AiConfig) {
             ...channel,
             id: channel.id || (index === 0 ? "default" : `channel-${index + 1}`),
             name: channel.name || (index === 0 ? "默认渠道" : `渠道 ${index + 1}`),
-            baseUrl: index === 0 && channel.id === "default" && channel.baseUrl === LEGACY_OPENAI_BASE_URL && !channel.apiKey ? NIFFLER_BASE_URL : channel.baseUrl,
-            models: uniqueRawModels(channel.models || []),
+            baseUrl: index === 0 && channel.id === "default" && channel.baseUrl === LEGACY_OPENAI_BASE_URL && !channel.apiKey ? OPENAI_BASE_URL : channel.baseUrl,
+            models: config.channelMode === "remote" && channel.modelsLoaded !== true ? [] : uniqueRawModels(channel.models || []),
+            textProtocol: normalizeTextProtocol(channel.textProtocol, config.channelMode),
         }),
     );
     if (!channels.length) {
@@ -385,26 +390,60 @@ function normalizeChannels(config: AiConfig) {
                 baseUrl: config.baseUrl || defaultConfig.baseUrl,
                 apiKey: config.apiKey || "",
                 apiFormat: config.apiFormat || defaultConfig.apiFormat,
-                models: uniqueRawModels([
-                    ...(config.models || []),
-                    config.model,
-                    config.imageModel,
-                    config.videoModel,
-                    config.textModel,
-                    config.audioModel,
-                ]),
+                models: [],
+                textProtocol: config.channelMode === "remote" ? "chat-completions" : "responses",
             }),
         );
     }
     return channels.map((channel) => ({ ...channel, models: uniqueRawModels(channel.models) }));
 }
 
+export function syncConfigWithChannels(config: AiConfig, channels: ModelChannel[]): AiConfig {
+    const availableChannels = config.channelMode === "remote" ? channels.map((channel) => (channel.modelsLoaded ? channel : { ...channel, models: [] })) : channels;
+    const models = modelOptionsFromChannels(availableChannels);
+    const imageModels = keepOrSuggest(normalizeModelList(config.imageModels, availableChannels, "image"), filterModelsByCapability(models, "image"));
+    const videoModels = keepOrSuggest(normalizeModelList(config.videoModels, availableChannels, "video"), filterModelsByCapability(models, "video"));
+    const textModels = keepOrSuggest(normalizeModelList(config.textModels, availableChannels, "text"), filterModelsByCapability(models, "text"));
+    const audioModels = keepOrSuggest(normalizeModelList(config.audioModels, availableChannels, "audio"), filterModelsByCapability(models, "audio"));
+    return {
+        ...config,
+        channels: availableChannels,
+        models,
+        model: "",
+        baseUrl: availableChannels[0]?.baseUrl || config.baseUrl,
+        apiKey: availableChannels[0]?.apiKey || config.apiKey,
+        apiFormat: availableChannels[0]?.apiFormat || config.apiFormat,
+        textProtocol: availableChannels[0]?.textProtocol || config.textProtocol,
+        imageModels,
+        videoModels,
+        textModels,
+        audioModels,
+        imageModel: normalizeDefaultModel(config.imageModel, imageModels),
+        videoModel: normalizeDefaultModel(config.videoModel, videoModels),
+        textModel: normalizeDefaultModel(config.textModel, textModels),
+        audioModel: normalizeDefaultModel(config.audioModel, audioModels),
+    };
+}
+
+function keepOrSuggest(current: string[], suggested: string[]) {
+    return current.length ? current : suggested;
+}
+
+function normalizeDefaultModel(value: string, options: string[]) {
+    return options.includes(value) ? value : options[0] || "";
+}
+
 export function defaultBaseUrlForApiFormat(apiFormat: ApiCallFormat) {
-    return apiFormat === "gemini" ? GEMINI_BASE_URL : NIFFLER_BASE_URL;
+    return apiFormat === "gemini" ? GEMINI_BASE_URL : OPENAI_BASE_URL;
 }
 
 function normalizeApiFormat(apiFormat: unknown): ApiCallFormat {
     return apiFormat === "gemini" ? "gemini" : "openai";
+}
+
+function normalizeTextProtocol(protocol: unknown, mode: AiConfig["channelMode"] = "local"): OpenAIProtocol {
+    if (protocol === "responses" || protocol === "chat-completions") return protocol;
+    return mode === "remote" ? "chat-completions" : "responses";
 }
 
 function uniqueRawModels(models: string[]) {
@@ -413,47 +452,6 @@ function uniqueRawModels(models: string[]) {
 
 function uniqueModelOptions(models: string[]) {
     return Array.from(new Set((models || []).map((model) => model.trim()).filter(Boolean)));
-}
-
-function encodeNifflerModels(models: string[]) {
-    return uniqueModelOptions(models.map((model) => encodeChannelModel(NIFFLER_CHANNEL_ID, model)));
-}
-
-function buildEffectiveConfig(config: AiConfig, nifflerModels: NifflerModelSelection, runtime: NifflerRuntime | null): AiConfig {
-    if (!runtime) return { ...config, channelMode: "local" };
-    const channel = createModelChannel({ id: NIFFLER_CHANNEL_ID, name: "Niffler", baseUrl: runtime.baseUrl, apiKey: runtime.apiKey, models: runtime.models });
-    const models = encodeNifflerModels(runtime.models);
-    const imageModels = encodeNifflerModels(runtime.imageModels);
-    const videoModels = encodeNifflerModels(runtime.videoModels);
-    const textModels = encodeNifflerModels(runtime.textModels);
-    const audioModels = encodeNifflerModels(runtime.audioModels);
-    return {
-        ...config,
-        channelMode: "local",
-        baseUrl: runtime.baseUrl,
-        apiKey: runtime.apiKey,
-        apiFormat: "openai",
-        channels: [channel],
-        models,
-        imageModels,
-        videoModels,
-        textModels,
-        audioModels,
-        model: keepModel(nifflerModels.model, models),
-        imageModel: keepModel(nifflerModels.imageModel, imageModels),
-        videoModel: keepModel(nifflerModels.videoModel, videoModels),
-        textModel: keepModel(nifflerModels.textModel, textModels),
-        audioModel: keepModel(nifflerModels.audioModel, audioModels),
-    };
-}
-
-function keepModel(current: string, models: string[]) {
-    const normalized = normalizeModelOptionValue(current, [createModelChannel({ id: NIFFLER_CHANNEL_ID, name: "Niffler", models: models.map(modelOptionName) })]);
-    return models.includes(normalized) ? normalized : models[0] || "";
-}
-
-function isNifflerModelKey(key: keyof AiConfig): key is keyof NifflerModelSelection {
-    return key === "model" || key === "imageModel" || key === "videoModel" || key === "textModel" || key === "audioModel";
 }
 
 export function buildApiUrl(baseUrl: string, path: string) {

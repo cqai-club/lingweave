@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { access, copyFile, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { v2 as cloudinary } from "cloudinary";
 import sharp from "sharp";
 
 const webDir = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -9,7 +10,18 @@ const outputDir = join(webDir, "public", "prompt-library");
 const tempDir = `${outputDir}.tmp`;
 const imageDir = join(tempDir, "images");
 const force = process.argv.includes("--force");
-const concurrency = 4;
+const uploadToCloudinary = process.argv.includes("--cloudinary");
+const skipImages = !uploadToCloudinary && (process.argv.includes("--skip-images") || process.env.PROMPT_SKIP_IMAGES === "1");
+const cloudinaryCloudName = process.env.CLOUDINARY_CLOUD_NAME || "";
+const cloudinaryFolder = process.env.CLOUDINARY_FOLDER || "lingweave/prompt-library";
+const concurrency = uploadToCloudinary ? 3 : 4;
+
+if (uploadToCloudinary) {
+    const { CLOUDINARY_API_KEY: api_key, CLOUDINARY_API_SECRET: api_secret } = process.env;
+    if (!cloudinaryCloudName || !api_key || !api_secret) throw new Error("Cloudinary 配置不完整");
+    cloudinary.config({ cloud_name: cloudinaryCloudName, api_key, api_secret, secure: true });
+    console.log(`Cloudinary 目标：${cloudinaryCloudName}/${cloudinaryFolder}`);
+}
 
 const sources = {
     awesomeGptImage: {
@@ -84,17 +96,23 @@ const groups = await Promise.all([
     buildDavidWuGptImage2Prompts(sources.davidWuGptImage2),
 ]);
 const items = groups.flat();
-const images = new Map(items.filter((item) => item.sourceImageUrl).map((item) => [item.sourceImageUrl, imageFileName(item.sourceImageUrl)]));
+const images = new Map(skipImages ? [] : items.filter((item) => item.sourceImageUrl).map((item) => [item.sourceImageUrl, imageFileName(item.sourceImageUrl)]));
+const availableImages = new Map();
 
 console.log(`共 ${items.length} 条提示词，开始同步 ${images.size} 张封面...`);
 let completed = 0;
 await runPool([...images], concurrency, async ([url, fileName]) => {
     const target = join(imageDir, fileName);
     const existing = join(outputDir, "images", fileName);
-    if (!force && (await exists(existing))) {
-        await copyFile(existing, target);
-    } else {
-        await downloadCover(url, target);
+    try {
+        if (uploadToCloudinary) availableImages.set(url, await uploadCloudinaryCover(url, fileName));
+        else {
+            if (!force && (await exists(existing))) await copyFile(existing, target);
+            else await downloadCover(url, target);
+            availableImages.set(url, `images/${fileName}`);
+        }
+    } catch (error) {
+        console.warn(`跳过失效封面：${url}\n${error instanceof Error ? error.message : String(error)}`);
     }
     completed += 1;
     if (completed % 25 === 0 || completed === images.size) console.log(`已同步 ${completed}/${images.size}`);
@@ -103,9 +121,14 @@ await runPool([...images], concurrency, async ([url, fileName]) => {
 const library = {
     syncedAt: new Date().toISOString(),
     sources: Object.values(sources).map(({ category, label, githubUrl }) => ({ id: category, label, githubUrl })),
-    items: items.map(({ sourceImageUrl, ...item }) => ({ ...item, coverUrl: sourceImageUrl ? `images/${images.get(sourceImageUrl)}` : "" })),
+    items: items.map(({ sourceImageUrl, ...item }) => ({ ...item, coverUrl: availableImages.get(sourceImageUrl) || "" })),
 };
-await writeFile(join(tempDir, "index.json"), `${JSON.stringify(library)}\n`);
+const indexPath = join(tempDir, "index.json");
+await writeFile(indexPath, `${JSON.stringify(library)}\n`);
+if (uploadToCloudinary) {
+    await cloudinary.uploader.upload(indexPath, { resource_type: "raw", public_id: `${cloudinaryFolder}/index.json`, overwrite: true, invalidate: true });
+    console.log(`索引已发布：https://res.cloudinary.com/${cloudinaryCloudName}/raw/upload/${cloudinaryFolder}/index.json`);
+}
 await rm(outputDir, { recursive: true, force: true });
 await rename(tempDir, outputDir);
 console.log(`同步完成：${outputDir}`);
@@ -197,6 +220,19 @@ async function downloadCover(url, target) {
     const input = Buffer.from(await response.arrayBuffer());
     const output = await sharp(input).rotate().resize(640, 480, { fit: "cover", position: "attention" }).webp({ quality: 80 }).toBuffer();
     await writeFile(target, output);
+}
+
+async function uploadCloudinaryCover(url, fileName) {
+    const result = await cloudinary.uploader.upload(url, {
+        folder: cloudinaryFolder,
+        public_id: fileName.replace(/\.webp$/, ""),
+        overwrite: false,
+        unique_filename: false,
+        resource_type: "image",
+        format: "webp",
+        transformation: [{ width: 640, height: 480, crop: "fill", gravity: "auto", quality: "auto:good" }],
+    });
+    return result.secure_url;
 }
 
 async function fetchWithRetry(url) {

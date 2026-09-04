@@ -57,13 +57,15 @@
 - 代码尽量短小直接，少拆不必要组件，少做多层 props 传递，避免为了抽象堆出更多代码。
 - 前端业务数据需要浏览器本地持久化时，默认使用 `localforage`；`localStorage` 只用于极小的简单配置，不要用来保存业务列表、生成记录、图片、base64 或大 JSON。
 
-## Niffler 环境规范
+## Logto 环境规范
 
-- Niffler 的浏览器端启用状态和请求地址统一从 `web/src/constant/niffler.ts` 获取，不要在组件、store 或请求函数中重新硬编码环境判断。
-- 本地开发时，前端继续使用同源 `/api` 和 `/v1` 请求，由 Vite 代理到 Niffler；代理目标默认是 `https://niffler.org`，需要切换调试服务时使用 `NIFFLER_PROXY_TARGET`，不要改成浏览器跨域直连。
-- 生产构建只在设置 `VITE_NIFFLER_ORIGIN` 时启用 Niffler；未设置时必须隐藏登录入口、停止自动会话请求，并让默认 Niffler Base URL 保持为空。
-- GitHub Pages 的 `VITE_NIFFLER_ORIGIN` 保持为空，不启用 Niffler；其他部署环境在构建时按实际地址配置，不要假设所有静态部署都存在 `/api` 或 `/v1` 反向代理。
-- `NIFFLER_PROXY_TARGET` 只属于 Vite 开发服务器配置，不能作为生产前端变量；`VITE_NIFFLER_ORIGIN` 会写入静态产物，修改后需要重新构建。
+- Logto 配置和回调地址统一从 `web/src/constant/logto.ts` 获取，不要在组件中硬编码环境判断或回调路径。
+- `VITE_LOGTO_APP_ID` 使用 Logto 单页应用的公开 App ID；留空时隐藏登录入口。浏览器前端不得配置 App Secret。
+- `VITE_LOGTO_ENDPOINT` 默认是 `https://auth.cqaiclub.asia`，修改后需要重新构建静态产物。
+- 同时配置 `VITE_LOGTO_API_RESOURCE` 和 `VITE_ACCOUNT_SERVICE_URL` 后启用账号服务模式：Logto 只负责认证，Account Service 负责校验身份并代理 NewAPI；浏览器不得持有 NewAPI Service Token 或完整平台 API Key。
+- 未启用账号服务模式时，保留本地 Base URL、API Key 和模型渠道作为独立回退；不要把服务端密钥写入任何 `VITE_` 变量或浏览器持久化存储。
+- `VITE_LOGTO_API_SCOPES` 默认使用 `ai:invoke`，必须与 Account Service 的 `LOGTO_REQUIRED_SCOPES` 和 Logto 权限配置一致。
+- 新增部署地址时，必须同步在 Logto 控制台登记对应的 `/callback` 重定向地址和应用根地址退出后重定向地址；回调地址必须尊重 Vite `BASE_URL`。
 
 ## 画布业务逻辑规范
 

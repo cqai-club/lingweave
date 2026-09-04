@@ -1,6 +1,6 @@
 services:
   app:
-    image: ghcr.io/g-dxw/lingweave:latest
+    image: ghcr.io/cqai-club/lingweave:latest
     container_name: lingweave
     ports:
       - "3000:3000"

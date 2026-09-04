@@ -5,7 +5,7 @@
   "author": {
     "name": "LingWeave"
   },
-  "repository": "https://github.com/g-dxw/lingweave",
+  "repository": "https://github.com/cqai-club/lingweave",
   "license": "AGPL-3.0",
   "keywords": ["lingweave", "infinite-canvas", "canvas", "mcp", "agent"],
   "skills": "./skills/",

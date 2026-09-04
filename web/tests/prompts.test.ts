@@ -11,7 +11,10 @@ beforeEach(() => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ items }), { status: 200, headers: { "Content-Type": "application/json" } })));
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+});
 
 describe("提示词库", () => {
     it("加载本地快照并补全封面路径", async () => {
@@ -21,6 +24,23 @@ describe("提示词库", () => {
         expect(fetch).toHaveBeenCalledWith("/prompt-library/index.json", { cache: "no-cache" });
         expect(result.items[0].coverUrl).toBe("/prompt-library/images/portrait.webp");
         expect(result.total).toBe(3);
+    });
+
+    it("保留对象存储的绝对封面地址", async () => {
+        const coverUrl = "https://res.cloudinary.com/demo/image/upload/cover.webp";
+        vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ items: [{ ...items[0], coverUrl }] }), { status: 200, headers: { "Content-Type": "application/json" } })));
+        const { fetchPrompts } = await import("@/services/api/prompts");
+
+        await expect(fetchPrompts()).resolves.toMatchObject({ items: [{ coverUrl }] });
+    });
+
+    it("支持从远程对象存储读取索引", async () => {
+        const libraryUrl = "https://res.cloudinary.com/demo/raw/upload/prompt-library/index.json";
+        vi.stubEnv("VITE_PROMPT_LIBRARY_URL", libraryUrl);
+        const { fetchPrompts } = await import("@/services/api/prompts");
+
+        await fetchPrompts();
+        expect(fetch).toHaveBeenCalledWith(libraryUrl, { cache: "no-cache" });
     });
 
     it("支持按标题、提示词和来源搜索", async () => {
@@ -49,6 +69,13 @@ describe("提示词库", () => {
 
     it("本地快照缺失时返回明确错误", async () => {
         vi.stubGlobal("fetch", vi.fn(async () => new Response("missing", { status: 404 })));
+        const { fetchPrompts } = await import("@/services/api/prompts");
+
+        await expect(fetchPrompts()).rejects.toThrow("本地提示词库不存在");
+    });
+
+    it("开发服务器回退到首页时返回明确错误", async () => {
+        vi.stubGlobal("fetch", vi.fn(async () => new Response("<!doctype html>", { status: 200, headers: { "Content-Type": "text/html" } })));
         const { fetchPrompts } = await import("@/services/api/prompts");
 
         await expect(fetchPrompts()).rejects.toThrow("本地提示词库不存在");

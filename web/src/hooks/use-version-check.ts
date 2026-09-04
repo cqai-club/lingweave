@@ -3,8 +3,8 @@ import { App } from "antd";
 import { APP_VERSION } from "@/constant/env";
 import { parseChangelog, type ReleaseInfo } from "@/lib/release";
 
-const latestVersionUrl = "https://raw.githubusercontent.com/g-dxw/lingweave/main/VERSION";
-const latestChangelogUrl = "https://raw.githubusercontent.com/g-dxw/lingweave/main/CHANGELOG.md";
+const latestVersionUrl = "https://raw.githubusercontent.com/cqai-club/lingweave/main/VERSION";
+const latestChangelogUrl = "https://raw.githubusercontent.com/cqai-club/lingweave/main/CHANGELOG.md";
 
 function readLocalReleases(): ReleaseInfo[] {
     return __APP_RELEASES__ || [];

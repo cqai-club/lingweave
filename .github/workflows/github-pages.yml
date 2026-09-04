@@ -38,7 +38,12 @@ jobs:
         working-directory: web
         env:
           VITE_BASE: /${{ github.event.repository.name }}/
-          VITE_NIFFLER_ORIGIN: ""
+          VITE_LOGTO_APP_ID: ${{ vars.VITE_LOGTO_APP_ID }}
+          VITE_LOGTO_ENDPOINT: https://auth.cqaiclub.asia
+          VITE_LOGTO_API_RESOURCE: ${{ vars.VITE_LOGTO_API_RESOURCE }}
+          VITE_LOGTO_API_SCOPES: ${{ vars.VITE_LOGTO_API_SCOPES }}
+          VITE_ACCOUNT_SERVICE_URL: ${{ vars.VITE_ACCOUNT_SERVICE_URL }}
+          VITE_PROMPT_LIBRARY_URL: ${{ vars.VITE_PROMPT_LIBRARY_URL }}
         run: bun run build
 
       - name: Add SPA fallback

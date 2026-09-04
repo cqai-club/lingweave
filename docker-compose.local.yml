@@ -5,7 +5,12 @@ services:
       context: .
       dockerfile: Dockerfile
       args:
-        VITE_NIFFLER_ORIGIN: ${VITE_NIFFLER_ORIGIN:-}
+        VITE_LOGTO_APP_ID: ${VITE_LOGTO_APP_ID:-}
+        VITE_LOGTO_ENDPOINT: ${VITE_LOGTO_ENDPOINT:-https://auth.cqaiclub.asia}
+        VITE_LOGTO_API_RESOURCE: ${VITE_LOGTO_API_RESOURCE:-}
+        VITE_LOGTO_API_SCOPES: ${VITE_LOGTO_API_SCOPES:-ai:invoke}
+        VITE_ACCOUNT_SERVICE_URL: ${VITE_ACCOUNT_SERVICE_URL:-}
+        VITE_PROMPT_LIBRARY_URL: ${VITE_PROMPT_LIBRARY_URL:-}
     ports:
       - "3000:3000"
     restart: unless-stopped

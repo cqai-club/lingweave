@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { createWriteStream } from "node:fs";
-import { access, mkdir, readFile, readdir, rename, rm } from "node:fs/promises";
+import { access, mkdir, readFile, rename, rm } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { fileURLToPath } from "node:url";
@@ -22,13 +22,14 @@ if (await isReady(outputDir)) {
         console.warn(`发布资源不可用，将从上游同步：${error instanceof Error ? error.message : String(error)}`);
         await rm(tempDir, { recursive: true, force: true });
         await rm(archivePath, { force: true });
+        process.env.PROMPT_SKIP_IMAGES = "1";
         await import("./sync-prompts.mjs");
     }
 }
 
 async function downloadRelease() {
     const version = (await readFile(resolve(webDir, "../VERSION"), "utf8")).trim();
-    const url = process.env.PROMPT_LIBRARY_URL || `https://github.com/g-dxw/lingweave/releases/download/${version}/prompt-library.tar.gz`;
+    const url = process.env.PROMPT_LIBRARY_URL || `https://github.com/cqai-club/lingweave/releases/download/${version}/prompt-library.tar.gz`;
     const response = await fetch(url, { redirect: "follow", signal: AbortSignal.timeout(120_000) });
     if (!response.ok || !response.body) throw new Error(`${response.status} ${response.statusText}`);
 
@@ -50,7 +51,7 @@ async function downloadRelease() {
 async function isReady(directory) {
     try {
         await access(join(directory, "index.json"));
-        return (await readdir(join(directory, "images"))).length > 0;
+        return true;
     } catch {
         return false;
     }

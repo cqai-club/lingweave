@@ -4,6 +4,7 @@ import UserLayout from "@/layouts/user-layout";
 
 export const router = createBrowserRouter(
     [
+        { path: "/callback", lazy: async () => ({ Component: (await import("@/pages/auth/callback")).default }) },
         {
             HydrateFallback: () => null,
             element: (
