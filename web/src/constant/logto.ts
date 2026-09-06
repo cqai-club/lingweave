@@ -19,7 +19,7 @@ export const NEW_API_URL = (import.meta.env.VITE_NEW_API_URL || "https://relay.c
 export const logtoConfig: LogtoConfig = {
     endpoint: LOGTO_ENDPOINT,
     appId: LOGTO_APP_ID,
-    scopes: [UserScope.Email, ...(LOGTO_API_RESOURCE ? LOGTO_API_SCOPES : [])],
+    scopes: [UserScope.Profile, UserScope.Email, ...(LOGTO_API_RESOURCE ? LOGTO_API_SCOPES : [])],
     ...(LOGTO_API_RESOURCE ? { resources: [LOGTO_API_RESOURCE] } : {}),
 };
 
