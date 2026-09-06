@@ -92,7 +92,7 @@ function LogtoAccountAction({ className, loginClassName, style }: { className: s
                             ? [
                                   {
                                       key: "quota",
-                                      label: <span>{remainingQuota === undefined ? "剩余额度：读取中" : `剩余额度：${formatQuota(remainingQuota)}`}</span>,
+                                      label: <span>{remainingQuota === undefined ? "剩余额度：读取中" : remainingQuota === 0 ? "剩余额度：0，未开通或已用尽，请充值或联系管理员" : `剩余额度：${formatQuota(remainingQuota)}`}</span>,
                                       icon: <WalletCards className="size-3.5" />,
                                       disabled: true,
                                   },

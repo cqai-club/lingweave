@@ -5,6 +5,7 @@
 + [调整] 仓库、文档、插件和 GHCR 镜像地址统一切换为 `cqai-club/lingweave`。
 + [调整] 设置中支持按渠道选择文本调用协议，可在 `/v1/chat/completions` 与 `/v1/responses` 之间切换。
 + [新增] 登录账户菜单显示账号服务返回的剩余额度，并提供 NewAPI 控制台和钱包充值入口。
++ [调整] 登录账户菜单在额度为 0 时提示未开通或已用尽，非零额度仍显示具体数值。
 + [调整] 默认模型和能力可选项仅允许使用已获取且能力匹配的模型，并在模型失效时自动清理选择。
 + [调整] 移除 Niffler 登录与模型网关耦合，改用 CQ AI Club Logto 登录，并保留用户本地 AI 渠道配置。
 + [新增] 增加 CQAI Account Service 账号服务模式：使用 Logto Access Token 代理 NewAPI，按应用分配账号和额度，浏览器不保存平台 API Key。
