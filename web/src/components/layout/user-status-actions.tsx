@@ -14,6 +14,7 @@ import { getAccountSummary } from "@/services/api/account";
 import { useConfigStore } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { useUserStore } from "@/stores/use-user-store";
+import { Prompt } from "@logto/react";
 
 type UserStatusActionsProps = {
     showConfig?: boolean;
@@ -123,7 +124,11 @@ function LogtoAccountAction({ className, loginClassName, style }: { className: s
             className={loginClassName}
             style={style}
             disabled={isLoading}
-            onClick={() => void signIn({ redirectUri: buildAppUrl("callback"), postRedirectUri: window.location.href })}
+            onClick={() => void signIn({
+                redirectUri: buildAppUrl("callback"),
+                postRedirectUri: window.location.href,
+                prompt: Prompt.Login,
+            })}
             aria-label="登录"
             title={error ? `登录失败：${error.message}` : "登录 CQ AI Club"}
         >
