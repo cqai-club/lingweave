@@ -75,8 +75,9 @@ VITE_NEW_API_URL=https://relay.cqaiclub.asia
 ```
 
 只设置 `VITE_LOGTO_APP_ID` 可以启用登录但不会启用 Account Service；浏览器前端不要配置 Logto App Secret、NewAPI 管理员 Token 或 `NEW_API_INTERNAL_TOKEN`。
+登录授权会请求 Logto `profile` 和 `email` 用户 scope，并使用 `prompt=login` 明确展示登录页；配置 API Resource 时再附加 `VITE_LOGTO_API_SCOPES` 中的业务权限。
 
-登录后账户菜单会显示账号服务返回的剩余额度，并提供 NewAPI 控制台和钱包充值入口。`VITE_NEW_API_URL` 用于配置 NewAPI 控制台地址，默认是 `https://relay.cqaiclub.asia`；进入控制台和充值页时，可能仍需单独完成 NewAPI 登录。
+登录后账户菜单会显示账号服务返回的剩余额度，并提供 NewAPI 控制台和站内充值入口。充值统一通过 Account Service 创建订单，网页支付完成后会回到 `/billing/result` 展示订单状态并刷新余额；桌面端的固定自定义协议回跳由 Account Service 按 Logto Client 配置决定。`VITE_NEW_API_URL` 用于配置 NewAPI 控制台地址，默认是 `https://relay.cqaiclub.asia`；进入控制台时，可能仍需单独完成 NewAPI 登录。
 
 OpenAI 渠道的文本调用协议可在“API 配置”中按渠道选择 `/v1/chat/completions` 或 `/v1/responses`；账号服务默认选择前者。
 

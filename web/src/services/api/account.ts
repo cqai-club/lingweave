@@ -1,4 +1,4 @@
-import { AccountClientError, CqaiAccountClient, type AccessTokenProvider, type AccountSummary } from "@cqaiclub/account-client";
+import { AccountClientError, CqaiAccountClient, type AccessTokenProvider, type AccountSummary, type BillingResponse, type CreateTopUpRequest } from "@cqaiclub/account-client";
 
 import { ACCOUNT_SERVICE_ENABLED, ACCOUNT_SERVICE_URL } from "@/constant/logto";
 import { buildApiUrl, type AiConfig } from "@/stores/use-config-store";
@@ -21,6 +21,18 @@ export function isAccountAiConfig(config: Pick<AiConfig, "channelMode">) {
 
 export async function getAccountSummary(signal?: AbortSignal): Promise<AccountSummary> {
     return getAccountClient().getAccount(signal);
+}
+
+export async function getTopUpInfo(signal?: AbortSignal) {
+    return getAccountClient().getTopUpInfo(signal);
+}
+
+export async function listTopUps(options: { page?: number; pageSize?: number; keyword?: string } = {}, signal?: AbortSignal) {
+    return getAccountClient().listTopUps(options, signal);
+}
+
+export async function createTopUp(body: CreateTopUpRequest, signal?: AbortSignal): Promise<BillingResponse> {
+    return getAccountClient().createTopUp(body, signal ? { signal } : {});
 }
 
 export async function requestAi(config: AiRequestConfig, path: string, init: RequestInit = {}) {

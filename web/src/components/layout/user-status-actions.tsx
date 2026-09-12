@@ -1,5 +1,5 @@
 import type { CSSProperties } from "react";
-import { useLogto } from "@logto/react";
+import { Prompt, useLogto } from "@logto/react";
 import { Dropdown } from "antd";
 import { useEffect, useState } from "react";
 import { BookOpen, CircleUserRound, ExternalLink, Keyboard, LogOut, Settings2, WalletCards } from "lucide-react";
@@ -7,6 +7,7 @@ import { BookOpen, CircleUserRound, ExternalLink, Keyboard, LogOut, Settings2, W
 import { AnimatedThemeToggler } from "@/components/ui/animated-theme-toggler";
 import { GitHubLink } from "@/components/layout/github-link";
 import { VersionReleaseModal } from "@/components/layout/version-release-modal";
+import { TopUpModal } from "@/components/layout/top-up-modal";
 import { ACCOUNT_SERVICE_ENABLED, buildAppUrl, buildNewApiUrl, LOGTO_ENABLED } from "@/constant/logto";
 import { cn } from "@/lib/utils";
 import { canvasThemes } from "@/lib/canvas-theme";
@@ -14,7 +15,8 @@ import { getAccountSummary } from "@/services/api/account";
 import { useConfigStore } from "@/stores/use-config-store";
 import { useThemeStore } from "@/stores/use-theme-store";
 import { useUserStore } from "@/stores/use-user-store";
-import { Prompt } from "@logto/react";
+import type { AccountSummary } from "@cqaiclub/account-client";
+import { formatAccountQuota, getAccountDisplayQuota } from "@/lib/account-quota";
 
 type UserStatusActionsProps = {
     showConfig?: boolean;
@@ -60,7 +62,8 @@ export function UserStatusActions({ showConfig = true, variant = "default", onOp
 function LogtoAccountAction({ className, loginClassName, style }: { className: string; loginClassName: string; style?: CSSProperties }) {
     const { isAuthenticated, isLoading, error, signIn, signOut } = useLogto();
     const user = useUserStore((state) => state.user);
-    const [accountSummary, setAccountSummary] = useState<{ quota?: number; quotaUsed?: number } | null>(null);
+    const [accountSummary, setAccountSummary] = useState<AccountSummary | null>(null);
+    const [topUpOpen, setTopUpOpen] = useState(false);
 
     useEffect(() => {
         if (!isAuthenticated || !ACCOUNT_SERVICE_ENABLED) {
@@ -82,39 +85,54 @@ function LogtoAccountAction({ className, loginClassName, style }: { className: s
 
     if (isAuthenticated) {
         const label = user?.displayName || user?.username || "已登录";
-        const remainingQuota = accountSummary?.quota === undefined ? undefined : Math.max(0, accountSummary.quota - (accountSummary.quotaUsed || 0));
+        const remainingQuota = accountSummary === null ? undefined : getAccountDisplayQuota(accountSummary);
+        let quotaLabel = "余额：读取中";
+        if (accountSummary !== null && remainingQuota !== undefined) {
+            const formattedQuota = formatAccountQuota(accountSummary, remainingQuota);
+            quotaLabel = remainingQuota === 0 ? `余额：${formattedQuota}，未开通或已用尽，请充值或联系管理员` : `余额：${formattedQuota}`;
+        }
         return (
-            <Dropdown
-                trigger={["click"]}
-                menu={{
-                    items: [
-                        { key: "profile", label, disabled: true },
-                        ...(ACCOUNT_SERVICE_ENABLED
-                            ? [
-                                  {
-                                      key: "quota",
-                                      label: <span>{remainingQuota === undefined ? "剩余额度：读取中" : remainingQuota === 0 ? "剩余额度：0，未开通或已用尽，请充值或联系管理员" : `剩余额度：${formatQuota(remainingQuota)}`}</span>,
-                                      icon: <WalletCards className="size-3.5" />,
-                                      disabled: true,
-                                  },
-                                  { key: "new-api", label: "打开 NewAPI 控制台", icon: <ExternalLink className="size-3.5" /> },
-                                  { key: "top-up", label: "前往充值（钱包）", icon: <WalletCards className="size-3.5" /> },
-                              ]
-                            : []),
-                        { type: "divider" },
-                        { key: "logout", label: "退出登录", icon: <LogOut className="size-3.5" />, danger: true },
-                    ],
-                    onClick: ({ key }) => {
-                        if (key === "new-api") window.open(buildNewApiUrl("dashboard"), "_blank", "noopener,noreferrer");
-                        if (key === "top-up") window.open(buildNewApiUrl("wallet"), "_blank", "noopener,noreferrer");
-                        if (key === "logout") void signOut(buildAppUrl());
-                    },
-                }}
-            >
-                <button type="button" className={className} style={style} aria-label="账户" title={label}>
-                    <CircleUserRound className="size-4" />
-                </button>
-            </Dropdown>
+            <>
+                <Dropdown
+                    trigger={["click"]}
+                    menu={{
+                        items: [
+                            { key: "profile", label, disabled: true },
+                            ...(ACCOUNT_SERVICE_ENABLED
+                                ? [
+                                      {
+                                          key: "quota",
+                                          label: <span>{quotaLabel}</span>,
+                                          icon: <WalletCards className="size-3.5" />,
+                                          disabled: true,
+                                      },
+                                      { key: "new-api", label: "打开 NewAPI 控制台", icon: <ExternalLink className="size-3.5" /> },
+                                      { key: "top-up", label: "站内充值", icon: <WalletCards className="size-3.5" /> },
+                                  ]
+                                : []),
+                            { type: "divider" },
+                            { key: "logout", label: "退出登录", icon: <LogOut className="size-3.5" />, danger: true },
+                        ],
+                        onClick: ({ key }) => {
+                            if (key === "new-api") window.open(buildNewApiUrl("dashboard"), "_blank", "noopener,noreferrer");
+                            if (key === "top-up") setTopUpOpen(true);
+                            if (key === "logout") void signOut(buildAppUrl());
+                        },
+                    }}
+                >
+                    <button type="button" className={className} style={style} aria-label="账户" title={label}>
+                        <CircleUserRound className="size-4" />
+                    </button>
+                </Dropdown>
+                <TopUpModal
+                    open={topUpOpen}
+                    account={accountSummary}
+                    onClose={() => setTopUpOpen(false)}
+                    onRefreshAccount={async () => {
+                        setAccountSummary(await getAccountSummary());
+                    }}
+                />
+            </>
         );
     }
 
@@ -124,19 +142,17 @@ function LogtoAccountAction({ className, loginClassName, style }: { className: s
             className={loginClassName}
             style={style}
             disabled={isLoading}
-            onClick={() => void signIn({
-                redirectUri: buildAppUrl("callback"),
-                postRedirectUri: window.location.href,
-                prompt: Prompt.Login,
-            })}
+            onClick={() =>
+                void signIn({
+                    redirectUri: buildAppUrl("callback"),
+                    postRedirectUri: window.location.href,
+                    prompt: Prompt.Login,
+                })
+            }
             aria-label="登录"
             title={error ? `登录失败：${error.message}` : "登录 CQ AI Club"}
         >
             登录
         </button>
     );
-}
-
-function formatQuota(value: number) {
-    return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 }).format(value);
 }
