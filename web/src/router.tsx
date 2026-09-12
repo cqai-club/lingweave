@@ -21,6 +21,7 @@ export const router = createBrowserRouter(
                 { path: "/canvas", lazy: async () => ({ Component: (await import("@/pages/canvas")).default }) },
                 { path: "/canvas/:id", lazy: async () => ({ Component: (await import("@/pages/canvas/project")).default }) },
                 { path: "/config", lazy: async () => ({ Component: (await import("@/pages/config")).default }) },
+                { path: "/billing/result", lazy: async () => ({ Component: (await import("@/pages/billing-result")).default }) },
                 { path: "/guide", lazy: async () => ({ Component: (await import("@/pages/guide")).default }) },
             ],
         },
