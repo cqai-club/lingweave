@@ -61,7 +61,7 @@ npm install
 npm run dev
 ```
 
-启动后访问 [http://localhost:3000](http://localhost:3000)。
+启动后访问 [http://localhost:3003](http://localhost:3003)。
 
 如需启用 CQ AI Club 登录和账号服务模式，在 `web/.env.local` 设置以下变量：
 

@@ -68,9 +68,12 @@ export function CanvasNodePromptPanel({ node, isRunning, onPromptChange, onConfi
                 references={mentionReferences}
                 onChange={updatePrompt}
                 onSubmit={submit}
-                className="thin-scrollbar h-24 w-full resize-none rounded-xl border px-3 py-2 text-sm leading-5 outline-none transition-[border-color,box-shadow] duration-150"
+                rows={6}
+                className="thin-scrollbar min-h-20 max-h-[50vh] w-full resize-y overflow-y-auto rounded-xl border px-3 py-2 text-sm leading-5 outline-none transition-[border-color,box-shadow] duration-150"
                 style={{ background: theme.node.fill, borderColor: promptFocused ? theme.node.activeStroke : theme.node.stroke, boxShadow: promptFocused ? `0 0 0 3px ${theme.canvas.selectionFill}` : "none", color: theme.node.text }}
                 placeholder={promptPlaceholder(mode, hasImageContent, hasTextContent)}
+                aria-label="生成提示词"
+                title="拖动右下角可调整输入框高度"
                 onFocus={() => setPromptFocused(true)}
                 onBlur={() => setPromptFocused(false)}
             />
