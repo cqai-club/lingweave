@@ -4,7 +4,7 @@
     "private": true,
     "type": "module",
     "scripts": {
-        "dev": "vite --host 0.0.0.0 --port 3000",
+        "dev": "vite --host 0.0.0.0 --port 3003",
         "sync:prompts": "node scripts/sync-prompts.mjs",
         "sync:prompts:cloudinary": "node --env-file=.env.cloudinary.local scripts/sync-prompts.mjs --cloudinary",
         "prepare:prompts": "node scripts/ensure-prompts.mjs",

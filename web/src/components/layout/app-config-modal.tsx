@@ -1,6 +1,6 @@
 import { App, Button, Form, Input, Modal, Progress, Select, Switch, Tabs } from "antd";
 import { CircleAlert, Cloud, HardDrive, KeyRound, Link2, Plus, RefreshCw, ShieldCheck, Trash2, Wifi } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { ModelPicker } from "@/components/model-picker";
 import { fetchChannelModels } from "@/services/api/image";
@@ -8,6 +8,7 @@ import { syncAppDataToWebdav, type AppSyncDomainKey, type AppSyncProgressEvent }
 import { testWebdavConnection, WEBDAV_MANIFEST_FILE_NAME } from "@/services/webdav-sync";
 import { audioFormatOptions, audioVoiceOptions, normalizeAudioSpeedValue } from "@/lib/audio-generation";
 import { useAgentStore } from "@/stores/use-agent-store";
+import { useUserStore } from "@/stores/use-user-store";
 import {
     createModelChannel,
     defaultBaseUrlForApiFormat,
@@ -74,6 +75,10 @@ const codexSetupSteps = [
 const codexPluginRemoveCommand = "codex plugin remove infinite-canvas";
 const codexMcpRemoveCommand = "codex mcp remove infinite-canvas";
 
+export function shouldAutoRefreshAccountModels(enabled: boolean, accountMode: boolean, userId: string, refreshedUserId: string) {
+    return enabled && accountMode && Boolean(userId) && userId !== refreshedUserId;
+}
+
 function createWebdavDomainProgress(): Record<AppSyncDomainKey, WebdavDomainProgress> {
     return webdavDomainKeys.reduce(
         (progress, key) => ({
@@ -83,7 +88,7 @@ function createWebdavDomainProgress(): Record<AppSyncDomainKey, WebdavDomainProg
         {} as Record<AppSyncDomainKey, WebdavDomainProgress>,
     );
 }
-export function AppConfigPanel({ showDoneButton = false, initialTab = "channels" }: { showDoneButton?: boolean; initialTab?: ConfigTabKey }) {
+export function AppConfigPanel({ showDoneButton = false, initialTab = "channels", autoRefreshModels = false, autoRefreshUserId = "" }: { showDoneButton?: boolean; initialTab?: ConfigTabKey; autoRefreshModels?: boolean; autoRefreshUserId?: string }) {
     const { message } = App.useApp();
     const [activeTab, setActiveTab] = useState<ConfigTabKey>(initialTab);
     const [loadingChannelId, setLoadingChannelId] = useState("");
@@ -93,6 +98,7 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
     const [webdavDomainProgress, setWebdavDomainProgress] = useState(createWebdavDomainProgress);
     const [storageEstimate, setStorageEstimate] = useState<StorageEstimate | null>(null);
     const [loadingStorage, setLoadingStorage] = useState(false);
+    const autoRefreshedUserId = useRef("");
     const config = useEffectiveConfig();
     const webdav = useConfigStore((state) => state.webdav);
     const updateConfig = useConfigStore((state) => state.updateConfig);
@@ -189,7 +195,7 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
         const runnable = accountMode ? config.channels.slice(0, 1) : config.channels.filter((channel) => channel.baseUrl.trim() && channel.apiKey.trim());
         if (!runnable.length) {
             message.error(accountMode ? "缺少默认模型渠道" : "请先填写至少一个渠道的 Base URL 和 API Key");
-            return;
+            return false;
         }
         setLoadingChannelId("all");
         try {
@@ -197,12 +203,32 @@ export function AppConfigPanel({ showDoneButton = false, initialTab = "channels"
             const modelMap = new Map(entries);
             updateChannels(config.channels.map((channel) => (modelMap.has(channel.id) ? { ...channel, models: modelMap.get(channel.id) || [], modelsLoaded: true } : channel)));
             message.success("模型列表已更新");
+            return true;
         } catch (error) {
             message.error(error instanceof Error ? error.message : "读取模型失败");
+            return false;
         } finally {
             setLoadingChannelId("");
         }
     };
+
+    const refreshAllModelsRef = useRef(refreshAllModels);
+    useEffect(() => {
+        refreshAllModelsRef.current = refreshAllModels;
+    }, [refreshAllModels]);
+
+    useEffect(() => {
+        if (!autoRefreshUserId) {
+            autoRefreshedUserId.current = "";
+            return;
+        }
+        if (!shouldAutoRefreshAccountModels(autoRefreshModels, accountMode, autoRefreshUserId, autoRefreshedUserId.current)) return;
+        const userId = autoRefreshUserId;
+        autoRefreshedUserId.current = userId;
+        void refreshAllModelsRef.current().then((refreshed) => {
+            if (!refreshed && autoRefreshedUserId.current === userId) autoRefreshedUserId.current = "";
+        });
+    }, [accountMode, autoRefreshModels, autoRefreshUserId]);
 
     const updateCapabilityModels = (group: ModelGroup, models: string[]) => {
         const available = new Set(filterModelsByCapability(config.models, group.capability));
@@ -621,6 +647,7 @@ export function AppConfigModal() {
     const isConfigOpen = useConfigStore((state) => state.isConfigOpen);
     const configTab = useConfigStore((state) => state.configTab);
     const accountMode = useConfigStore((state) => state.config.channelMode === "remote");
+    const accountUserId = useUserStore((state) => state.user?.id || "");
     const setConfigDialogOpen = useConfigStore((state) => state.setConfigDialogOpen);
     return (
         <Modal
@@ -637,7 +664,7 @@ export function AppConfigModal() {
             styles={{ body: { maxHeight: "72vh", overflowY: "auto", paddingRight: 12 } }}
             footer={null}
         >
-            <AppConfigPanel showDoneButton initialTab={configTab} />
+            <AppConfigPanel showDoneButton initialTab={configTab} autoRefreshModels={isConfigOpen} autoRefreshUserId={accountUserId} />
         </Modal>
     );
 }

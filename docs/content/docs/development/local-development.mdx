@@ -18,7 +18,7 @@ bun run dev
 前端默认访问：
 
 ```text
-http://localhost:3000
+http://localhost:3003
 ```
 
 如需启用 CQ AI Club 登录，在 Logto 控制台创建单页应用，并新建 `web/.env.local`：
@@ -32,7 +32,7 @@ VITE_ACCOUNT_SERVICE_URL=http://localhost:8787
 VITE_NEW_API_URL=https://relay.cqaiclub.asia
 ```
 
-Logto 应用需要登记登录回调 `http://localhost:3000/callback` 和退出后重定向 `http://localhost:3000/`。`VITE_LOGTO_APP_ID` 留空时隐藏登录入口；浏览器前端不需要也不能配置 App Secret。
+Logto 应用需要登记登录回调 `http://localhost:3003/callback` 和退出后重定向 `http://localhost:3003/`。`VITE_LOGTO_APP_ID` 留空时隐藏登录入口；浏览器前端不需要也不能配置 App Secret。
 
 同时配置 `VITE_LOGTO_APP_ID`、`VITE_LOGTO_API_RESOURCE` 与 `VITE_ACCOUNT_SERVICE_URL` 后，前端会启用账号服务模式：登录取得的 Access Token 发给 Account Service，由它校验身份、按 Client ID 映射应用并代理 NewAPI。只设置 App ID 时仍然只是登录，不会自动取得 AI 模型或额度。
 

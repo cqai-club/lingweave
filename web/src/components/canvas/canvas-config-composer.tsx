@@ -126,7 +126,11 @@ export function CanvasConfigComposer({ value, inputs, onChange, onClose }: Canva
                     ref={editorRef}
                     contentEditable
                     suppressContentEditableWarning
-                    className="thin-scrollbar min-h-28 w-full overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 text-sm leading-7 outline-none"
+                    role="textbox"
+                    aria-label="组装提示词"
+                    aria-multiline="true"
+                    title="拖动右下角可调整输入框高度"
+                    className="thin-scrollbar h-[11.5rem] min-h-28 max-h-[50vh] w-full resize-y overflow-y-auto whitespace-pre-wrap break-words px-3 py-2 text-sm leading-7 outline-none"
                     style={{ color: theme.node.text }}
                     onInput={() => {
                         if (!composingRef.current) syncFromEditor();

@@ -106,7 +106,7 @@ function LogtoAccountAction({ className, loginClassName, style }: { className: s
                                           icon: <WalletCards className="size-3.5" />,
                                           disabled: true,
                                       },
-                                      { key: "new-api", label: "打开 NewAPI 控制台", icon: <ExternalLink className="size-3.5" /> },
+                                      { key: "new-api", label: "打开CQAI俱乐部AI平台", icon: <ExternalLink className="size-3.5" /> },
                                       { key: "top-up", label: "站内充值", icon: <WalletCards className="size-3.5" /> },
                                   ]
                                 : []),

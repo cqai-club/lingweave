@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
+import { shouldAutoRefreshAccountModels } from "@/components/layout/app-config-modal";
 import { toLocalUser } from "@/components/layout/logto-auth-provider";
 import { buildAppUrl, buildNewApiUrl } from "@/constant/logto";
 
@@ -40,5 +41,13 @@ describe("Logto 配置", () => {
         const userStatusActions = source("components/layout/user-status-actions.tsx");
         expect(userStatusActions).toContain("className={loginClassName}");
         expect(userStatusActions).toMatch(/>\s*登录\s*<\/button>/);
+    });
+
+    it("仅在账号登录后首次打开配置弹窗时自动拉取模型", () => {
+        expect(shouldAutoRefreshAccountModels(true, true, "user-1", "")).toBe(true);
+        expect(shouldAutoRefreshAccountModels(true, true, "user-1", "user-1")).toBe(false);
+        expect(shouldAutoRefreshAccountModels(false, true, "user-1", "")).toBe(false);
+        expect(shouldAutoRefreshAccountModels(true, true, "", "")).toBe(false);
+        expect(shouldAutoRefreshAccountModels(true, false, "user-1", "")).toBe(false);
     });
 });

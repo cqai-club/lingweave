@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Button, Divider, InputNumber, Modal, Radio, Segmented, Spin, Tag } from "antd";
+import { Alert, App, Button, Divider, InputNumber, Modal, Radio, Segmented, Spin, Tag } from "antd";
 import { ArrowUpRight, CheckCircle2, CreditCard, RefreshCw, Sparkles, WalletCards } from "lucide-react";
 import type { AccountSummary } from "@cqaiclub/account-client";
 
@@ -21,6 +21,7 @@ type PaymentResult = {
 };
 
 export function TopUpModal({ open, account, onClose, onRefreshAccount }: TopUpModalProps) {
+    const { message } = App.useApp();
     const [info, setInfo] = useState<TopUpInfo | null>(null);
     const [optionId, setOptionId] = useState<string>();
     const [amount, setAmount] = useState<number | null>(null);
@@ -105,9 +106,12 @@ export function TopUpModal({ open, account, onClose, onRefreshAccount }: TopUpMo
     }
 
     async function refreshBalance() {
+        if (refreshing) return;
         setRefreshing(true);
+        setError("");
         try {
             await onRefreshAccount();
+            message.success("积分余额已刷新");
         } catch (reason) {
             setError(reason instanceof Error ? reason.message : "刷新余额失败");
         } finally {
@@ -120,7 +124,7 @@ export function TopUpModal({ open, account, onClose, onRefreshAccount }: TopUpMo
             <div className="overflow-hidden rounded-2xl bg-white dark:bg-stone-950">
                 <div className="relative overflow-hidden bg-stone-950 px-6 pb-6 pt-7 text-white dark:bg-black">
                     <div className="absolute -right-12 -top-16 size-44 rounded-full bg-amber-400/20 blur-3xl" />
-                    <div className="relative flex items-start justify-between gap-4">
+                    <div className="relative flex items-start justify-between gap-3">
                         <div>
                             <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-amber-300">
                                 <Sparkles className="size-3.5" />
@@ -130,8 +134,21 @@ export function TopUpModal({ open, account, onClose, onRefreshAccount }: TopUpMo
                             <p className="mb-0 mt-2 text-sm text-stone-300">充值入账到账号钱包，支付完成后可在此刷新余额。</p>
                         </div>
                         <div className="rounded-xl border border-white/15 bg-white/10 px-3 py-2 text-right backdrop-blur">
-                            <div className="text-[11px] text-stone-400">当前可用</div>
-                            <div className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-amber-200">
+                            <div className="flex items-center justify-end gap-2 text-[11px]">
+                                <span className="text-stone-400">当前可用</span>
+                                <button
+                                    type="button"
+                                    className="inline-flex h-5 items-center gap-1 rounded-md px-1.5 font-medium text-amber-200/80 transition hover:bg-white/10 hover:text-amber-100 disabled:cursor-wait disabled:opacity-60"
+                                    onClick={() => void refreshBalance()}
+                                    disabled={refreshing}
+                                    aria-label="刷新余额"
+                                    title="刷新余额"
+                                >
+                                    <RefreshCw className={refreshing ? "size-3 animate-spin" : "size-3"} />
+                                    {refreshing ? "刷新中" : "刷新"}
+                                </button>
+                            </div>
+                            <div className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-amber-200" aria-live="polite">
                                 <WalletCards className="size-3.5" />
                                 {account && currentBalance !== undefined ? formatAccountQuota(account, currentBalance) : "读取中"}
                             </div>
