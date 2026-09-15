@@ -1,11 +1,11 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Alert, App, Button, Divider, InputNumber, Modal, Radio, Segmented, Spin, Tag } from "antd";
 import { ArrowUpRight, CheckCircle2, CreditCard, RefreshCw, Sparkles, WalletCards } from "lucide-react";
 import type { AccountSummary } from "@cqaiclub/account-client";
 
 import { createTopUp, getTopUpInfo } from "@/services/api/account";
 import { formatAccountQuota, getAccountDisplayQuota } from "@/lib/account-quota";
-import { buildTopUpRequest, getTopUpCreditAmount, normalizeTopUpInfo, submitTopUpPayment, type TopUpInfo } from "@/lib/top-up";
+import { buildTopUpRequest, getTopUpCreditAmount, isTrustedTopUpSuccessMessage, normalizeTopUpInfo, submitTopUpPayment, type TopUpInfo } from "@/lib/top-up";
 
 type TopUpModalProps = {
     open: boolean;
@@ -32,6 +32,9 @@ export function TopUpModal({ open, account, onClose, onRefreshAccount }: TopUpMo
     const [submitting, setSubmitting] = useState(false);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState("");
+    const paymentWindowRef = useRef<Window | null>(null);
+    const paymentSuccessHandledRef = useRef(false);
+    const refreshingRef = useRef(false);
 
     useEffect(() => {
         if (!open) return;
@@ -78,6 +81,8 @@ export function TopUpModal({ open, account, onClose, onRefreshAccount }: TopUpMo
         setError("");
         const paymentTarget = `cqai-payment-${Date.now()}`;
         const paymentWindow = typeof window === "undefined" ? null : window.open("about:blank", paymentTarget);
+        paymentWindowRef.current = paymentWindow;
+        paymentSuccessHandledRef.current = false;
         try {
             const response = await createTopUp(
                 buildTopUpRequest(selectedOption.id, {
@@ -93,31 +98,51 @@ export function TopUpModal({ open, account, onClose, onRefreshAccount }: TopUpMo
             const nextPayment = { ...(url ? { url } : {}), ...(fields && Object.keys(fields).length > 0 ? { fields } : {}), ...(orderId ? { orderId } : {}) };
             setPayment(nextPayment);
             if (url) {
-                if (!submitTopUpPayment(url, nextPayment.fields, paymentWindow, paymentTarget)) paymentWindow?.close();
+                if (!submitTopUpPayment(url, nextPayment.fields, paymentWindow, paymentTarget)) {
+                    paymentWindow?.close();
+                    paymentWindowRef.current = null;
+                }
             } else {
                 paymentWindow?.close();
+                paymentWindowRef.current = null;
             }
         } catch (reason) {
             paymentWindow?.close();
+            paymentWindowRef.current = null;
             setError(reason instanceof Error ? reason.message : "创建充值订单失败");
         } finally {
             setSubmitting(false);
         }
     }
 
-    async function refreshBalance() {
-        if (refreshing) return;
-        setRefreshing(true);
-        setError("");
-        try {
-            await onRefreshAccount();
-            message.success("积分余额已刷新");
-        } catch (reason) {
-            setError(reason instanceof Error ? reason.message : "刷新余额失败");
-        } finally {
-            setRefreshing(false);
-        }
-    }
+    const refreshBalance = useCallback(
+        async (successMessage = "积分余额已刷新") => {
+            if (refreshingRef.current) return;
+            refreshingRef.current = true;
+            setRefreshing(true);
+            setError("");
+            try {
+                await onRefreshAccount();
+                message.success(successMessage);
+            } catch (reason) {
+                setError(reason instanceof Error ? reason.message : "刷新余额失败");
+            } finally {
+                refreshingRef.current = false;
+                setRefreshing(false);
+            }
+        },
+        [message, onRefreshAccount],
+    );
+
+    useEffect(() => {
+        const handlePaymentSuccess = (event: MessageEvent) => {
+            if (paymentSuccessHandledRef.current || !isTrustedTopUpSuccessMessage(event, paymentWindowRef.current, window.location.origin)) return;
+            paymentSuccessHandledRef.current = true;
+            void refreshBalance("充值已到账，积分余额已刷新");
+        };
+        window.addEventListener("message", handlePaymentSuccess);
+        return () => window.removeEventListener("message", handlePaymentSuccess);
+    }, [refreshBalance]);
 
     return (
         <Modal open={open} onCancel={onClose} footer={null} width={560} centered destroyOnHidden styles={{ body: { padding: 0 } }}>
