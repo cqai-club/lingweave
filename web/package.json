@@ -7,6 +7,7 @@
         "dev": "vite --host 0.0.0.0 --port 3003",
         "sync:prompts": "node scripts/sync-prompts.mjs",
         "sync:prompts:cloudinary": "node --env-file=.env.cloudinary.local scripts/sync-prompts.mjs --cloudinary",
+        "check:prompts": "node scripts/check-prompts.mjs",
         "prepare:prompts": "node scripts/ensure-prompts.mjs",
         "predev": "node scripts/ensure-prompts.mjs",
         "build:docs": "cd ../docs && npm run build",
@@ -60,7 +61,6 @@
         "happy-dom": "^20.10.6",
         "prettier": "^3.8.3",
         "shadcn": "^4.7.0",
-        "sharp": "^0.34.5",
         "typescript": "^5",
         "vite": "^7.3.0",
         "vitest": "^4.1.10"

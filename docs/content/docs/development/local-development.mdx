@@ -38,7 +38,7 @@ Logto 应用需要登记登录回调 `http://localhost:3003/callback` 和退出�
 
 登录后的账户菜单会显示账号服务返回的剩余额度，并链接到 NewAPI 控制台和钱包充值页。充值回跳由 Account Service 根据 Logto Client ID 和请求 Origin 决定，前端不提交回跳地址；NewAPI 控制台地址由 `VITE_NEW_API_URL` 配置，默认是 `https://relay.cqaiclub.asia`；Logto 登录不代表已经建立了 NewAPI 控制台会话。
 
-GitHub Pages 构建从仓库 Actions Variables 读取 `VITE_LOGTO_APP_ID`、`VITE_LOGTO_API_RESOURCE`、`VITE_LOGTO_API_SCOPES`、`VITE_ACCOUNT_SERVICE_URL` 和 `VITE_PROMPT_LIBRARY_URL`。当前仓库站点需要在 Logto 登记登录回调 `https://cqai-club.github.io/lingweave/callback` 和退出后重定向 `https://cqai-club.github.io/lingweave/`；Vercel 或其他域名按同样规则登记，并把前端 Origin 加入 Account Service 的 `CORS_ALLOWED_ORIGINS`。
+GitHub Pages 构建从仓库 Actions Variables 读取 `VITE_LOGTO_APP_ID`、`VITE_LOGTO_API_RESOURCE`、`VITE_LOGTO_API_SCOPES` 和 `VITE_ACCOUNT_SERVICE_URL`。提示词库使用构建产物内的同源快照，并由定时构建每日刷新。当前仓库站点需要在 Logto 登记登录回调 `https://cqai-club.github.io/lingweave/callback` 和退出后重定向 `https://cqai-club.github.io/lingweave/`；Vercel 或其他域名按同样规则登记，并把前端 Origin 加入 Account Service 的 `CORS_ALLOWED_ORIGINS`。
 
 ## 2. 配置模型
 
@@ -48,16 +48,16 @@ OpenAI 渠道的“文本调用协议”在“API 配置”中按渠道单独选
 
 ## 3. 同步提示词库
 
-`bun run dev` 和生产构建会先检查 `web/public/prompt-library/`。本地没有提示词库时，会优先下载当前版本 GitHub Release 中的资源包；资源包不可用时从上游同步文本索引并跳过不可稳定访问的封面。如需主动更新本地资源：
+`bun run dev` 和生产构建会先检查 `web/public/prompt-library/`。快照不存在或超过 24 小时时会从上游生成最新的图文精选索引；刷新失败但已有快照时继续使用上次可用版本，首次准备失败时再尝试当前版本 GitHub Release 资源包。如需主动更新：
 
 ```bash
 cd web
 npm run sync:prompts
 ```
 
-再次同步会复用已经下载的图片；需要重新下载全部封面时执行 `npm run sync:prompts -- --force`。`web/public/prompt-library/` 不提交到 Git，版本标签发布时由 GitHub Actions 生成 `prompt-library.tar.gz` 并上传到对应 Release。
+同步器会解析并记录上游效果图 URL，但不下载、裁切或压缩图片；完成前会检查来源最低数量、效果图覆盖率、重复正文、稳定 ID、来源计数和摘要。可执行 `npm run check:prompts` 单独验证当前索引。`web/public/prompt-library/` 不提交到 Git，版本标签发布时由 GitHub Actions 生成 `prompt-library.tar.gz` 并上传到对应 Release。
 
-如需把封面和索引发布到 Cloudinary，在仅本地使用且已被 Git 忽略的 `web/.env.cloudinary.local` 中配置：
+如需把 Raw 索引发布到 Cloudinary，在仅本地使用且已被 Git 忽略的 `web/.env.cloudinary.local` 中配置：
 
 ```bash
 CLOUDINARY_CLOUD_NAME=你的CloudName
@@ -66,11 +66,13 @@ CLOUDINARY_API_SECRET=你的ApiSecret
 CLOUDINARY_FOLDER=lingweave/prompt-library
 ```
 
-然后执行 `npm run sync:prompts:cloudinary`。上传脚本使用固定哈希 ID、跳过失效封面，并在图片处理完后发布 `index.json`。API Secret 不得使用 `VITE_` 前缀；前端和部署环境只需配置公开索引地址：
+然后执行 `npm run sync:prompts:cloudinary`。脚本只发布包含上游图片 URL 的 `index.json`，不会上传图片；浏览器会从上游按需加载效果图。API Secret 不得使用 `VITE_` 前缀；前端和部署环境只需配置公开索引地址：
 
 ```bash
 VITE_PROMPT_LIBRARY_URL=https://res.cloudinary.com/<CloudName>/raw/upload/lingweave/prompt-library/index.json
 ```
+
+必须使用上述不含 `/v123/` 版本段的稳定 URL；带版本号的地址会固定在旧快照，无法随覆盖发布自动更新。
 
 ## 4. 编译并映射文档
 

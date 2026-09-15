@@ -37,3 +37,6 @@ jobs:
 
       - name: Build web
         run: bun run build
+
+      - name: Validate prompt library
+        run: bun run check:prompts

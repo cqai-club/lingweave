@@ -1,15 +1,20 @@
 ---
 title: 第三方 GitHub 提示词仓库
-description: 当前已接入同步逻辑的第三方提示词仓库
+description: 第一阶段提示词精选库的来源、模型与许可
 ---
 
 # 第三方 GitHub 提示词仓库
 
-| 地址 | 状态 |
-| --- | --- |
-| https://github.com/EvoLinkAI/awesome-gpt-image-2-API-and-Prompts | 已实现同步逻辑 |
-| https://github.com/ZeroLu/awesome-gpt-image | 已实现同步逻辑 |
-| https://github.com/ImgEdify/Awesome-GPT4o-Image-Prompts | 已实现同步逻辑 |
-| https://github.com/YouMind-OpenLab/awesome-gpt-image-2 | 已实现同步逻辑 |
-| https://github.com/YouMind-OpenLab/awesome-nano-banana-pro-prompts | 已实现同步逻辑 |
-| https://github.com/davidwuw0811-boop/awesome-gpt-image2-prompts | 已实现同步逻辑 |
+第一阶段同步适合直接浏览的中文友好图文精选内容，记录上游效果图 URL，但不下载、截图、裁切或二次处理图片。每次同步都会保存来源、模型、许可、稳定 ID 和摘要信息。
+
+| 地址 | 模型 | 许可 | 状态 |
+| --- | --- | --- | --- |
+| https://github.com/ZeroLu/awesome-gpt-image | GPT Image 2 | MIT | 已接入 |
+| https://github.com/ImgEdify/Awesome-GPT4o-Image-Prompts | GPT-4o | MIT | 已接入 |
+| https://github.com/YouMind-OpenLab/awesome-gpt-image-2 | GPT Image 2 | CC BY 4.0 | 已接入精选列表 |
+| https://github.com/YouMind-OpenLab/awesome-nano-banana-pro-prompts | Nano Banana Pro | CC BY 4.0 | 已接入精选列表 |
+| https://github.com/davidwuw0811-boop/awesome-gpt-image2-prompts | GPT Image 2 | 仓库未提供独立许可文件 | 已接入 |
+| https://github.com/freestylefly/awesome-gpt-image-2 | GPT Image 2 | MIT；第三方内容依原来源 | 已接入机器可读案例并跨来源去重 |
+| https://github.com/EvoLinkAI/awesome-gpt-image-2-API-and-Prompts | GPT Image 2 | CC0-1.0 | 候选来源，第一阶段未接入 |
+
+`freestylefly/awesome-gpt-image-2` 通过 `data/cases.json` 提供提示词、分类、标签、原始来源和效果图路径；同步时保留其独有内容，正文与已有来源完全相同的条目不会重复展示。YouMind 的完整机器可读数据规模较大，留到后续分片索引阶段处理；EvoLink 当前也未提供适合稳定同步的完整提示词数据文件，因此暂不纳入第一阶段。

@@ -10,11 +10,12 @@ export function PromptCover({ src, alt, className }: { src: string; alt: string;
 
     if (failed) {
         return (
-            <div className={cn("flex items-center justify-center bg-stone-100 text-stone-400 dark:bg-stone-900 dark:text-stone-600", className)}>
-                <ImageOff className="size-8" />
+            <div className={cn("flex flex-col items-center justify-center gap-2 bg-muted text-xs text-muted-foreground", className)}>
+                <ImageOff className="size-7" />
+                <span>暂无效果图</span>
             </div>
         );
     }
 
-    return <img src={src} alt={alt} loading="lazy" className={className} onError={() => setFailed(true)} />;
+    return <img src={src} alt={alt} loading="lazy" decoding="async" referrerPolicy="no-referrer" draggable={false} className={className} onError={() => setFailed(true)} />;
 }

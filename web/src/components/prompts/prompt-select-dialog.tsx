@@ -1,5 +1,5 @@
 import { Check, Search } from "lucide-react";
-import { type UIEvent, useEffect, useState } from "react";
+import { type UIEvent, useDeferredValue, useEffect, useState } from "react";
 import { App, Empty, Input, Modal, Spin, Tag } from "antd";
 
 import { ALL_PROMPTS_OPTION } from "@/services/api/prompts";
@@ -11,9 +11,20 @@ import { usePromptList } from "./use-prompt-list";
 export function PromptSelectDialog({ open, onOpenChange, onSelect }: { open: boolean; onOpenChange: (open: boolean) => void; onSelect: (prompt: string) => void }) {
     const { message } = App.useApp();
     const [keyword, setKeyword] = useState("");
-    const [selectedTags, setSelectedTags] = useState<string[]>([]);
+    const [selectedTag, setSelectedTag] = useState(ALL_PROMPTS_OPTION);
     const [selectedCategory, setSelectedCategory] = useState(ALL_PROMPTS_OPTION);
-    const { query, items, tags: promptTags, categories: promptCategories } = usePromptList({ keyword, tags: selectedTags, category: selectedCategory, enabled: open });
+    const deferredKeyword = useDeferredValue(keyword);
+    const {
+        query,
+        items,
+        tags: promptTags,
+        categories: promptCategories,
+    } = usePromptList({
+        keyword: deferredKeyword,
+        tag: selectedTag,
+        category: selectedCategory,
+        enabled: open,
+    });
     const selectPrompt = (prompt: string) => {
         onSelect(prompt);
         onOpenChange(false);
@@ -25,29 +36,33 @@ export function PromptSelectDialog({ open, onOpenChange, onSelect }: { open: boo
 
     const handleListScroll = (event: UIEvent<HTMLDivElement>) => {
         const target = event.currentTarget;
-        if (query.hasNextPage && !query.isFetchingNextPage && target.scrollTop + target.clientHeight >= target.scrollHeight - 160) void query.fetchNextPage();
+        if (query.hasNextPage && !query.isFetching && target.scrollTop + target.clientHeight >= target.scrollHeight - 160) void query.fetchNextPage();
+    };
+    const selectCategory = (category: string) => {
+        setSelectedCategory(category);
+        setSelectedTag(ALL_PROMPTS_OPTION);
     };
 
     return (
         <Modal title="提示词库" open={open} onCancel={() => onOpenChange(false)} footer={null} width={1040} centered>
             <div data-canvas-no-zoom onWheelCapture={(event) => event.stopPropagation()}>
                 <div className="mx-auto max-w-2xl">
-                    <Input size="large" prefix={<Search className="size-4 text-stone-400" />} value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="按标题查询" />
+                    <Input size="large" prefix={<Search className="size-4 text-muted-foreground" />} value={keyword} onChange={(event) => setKeyword(event.target.value)} placeholder="搜索标题、提示词内容或来源" />
                 </div>
                 <div className="mt-5 grid gap-3">
                     <div className="grid gap-2 sm:grid-cols-[56px_minmax(0,1fr)] sm:items-start">
-                        <div className="pt-2 text-xs font-medium text-stone-500 dark:text-stone-400">分类</div>
+                        <div className="pt-2 text-xs font-medium text-muted-foreground">分类</div>
                         <div className="flex flex-wrap gap-2">
                             {promptCategories.map((category) => (
-                                <Tag.CheckableTag key={category} checked={selectedCategory === category} className={cn("prompt-filter-tag", selectedCategory === category && "is-active")} onChange={() => setSelectedCategory(category)}>
+                                <Tag.CheckableTag key={category} checked={selectedCategory === category} className={cn("prompt-filter-tag", selectedCategory === category && "is-active")} onChange={() => selectCategory(category)}>
                                     {category}
                                 </Tag.CheckableTag>
                             ))}
                         </div>
                     </div>
                     <div className="grid gap-2 sm:grid-cols-[56px_minmax(0,1fr)] sm:items-start">
-                        <div className="pt-2 text-xs font-medium text-stone-500 dark:text-stone-400">标签</div>
-                        <PromptTagFilter options={promptTags} selected={selectedTags} onChange={setSelectedTags} />
+                        <div className="pt-2 text-xs font-medium text-muted-foreground">标签</div>
+                        <PromptTagFilter options={promptTags} selected={selectedTag} onChange={setSelectedTag} />
                     </div>
                 </div>
                 <div className="thin-scrollbar mt-6 max-h-[520px] overflow-y-auto pr-2" data-canvas-no-zoom onScroll={handleListScroll} onWheelCapture={(event) => event.stopPropagation()}>
