@@ -29,7 +29,9 @@ jobs:
 
       - name: Sync prompt library
         working-directory: web
-        run: bun run sync:prompts
+        run: |
+          bun run sync:prompts
+          bun run check:prompts
 
       - name: Package prompt library
         run: tar -czf prompt-library.tar.gz -C web/public prompt-library

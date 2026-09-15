@@ -27,17 +27,17 @@ VITE_LOGTO_ENDPOINT=https://auth.cqaiclub.asia
 VITE_LOGTO_API_RESOURCE=https://account.cqaiclub.asia
 VITE_LOGTO_API_SCOPES=ai:invoke
 VITE_ACCOUNT_SERVICE_URL=https://account.cqaiclub.asia
-VITE_PROMPT_LIBRARY_URL=可选的Cloudinary公开index.json地址
+VITE_PROMPT_LIBRARY_URL=可选的Cloudinary稳定Raw index.json地址
 ```
 
-这些值会在 Docker 构建时写入静态前端，修改后必须重新部署。Logto 控制台需要登记实际 Render 域名的 `/callback` 和退出后重定向地址；Account Service 的 `CORS_ALLOWED_ORIGINS` 也要加入该域名的 Origin。不要把 App Secret、NewAPI 管理员 Token 或 `NEW_API_INTERNAL_TOKEN` 填入前端变量。
+这些值会在 Docker 构建时写入静态前端，修改后必须重新部署。提示词地址留空时使用构建内的同源图文索引快照，效果图由浏览器从上游按需加载；使用 Cloudinary 时不要填写带 `/v123/` 版本段的固定地址。Logto 控制台需要登记实际 Render 域名的 `/callback` 和退出后重定向地址；Account Service 的 `CORS_ALLOWED_ORIGINS` 也要加入该域名的 Origin。不要把 App Secret、NewAPI 管理员 Token 或 `NEW_API_INTERNAL_TOKEN` 填入前端变量。
 
 ## 免费版说明
 
 默认使用 Render 免费 Web Service：
 
 - 空闲约 15 分钟后会休眠，下次访问会自动唤醒。
-- 当前主应用数据默认保存在浏览器本地；第三方提示词由浏览器前端直连拉取。
+- 当前主应用数据默认保存在浏览器本地；第三方提示词快照随构建产物发布。
 - 适合体验和演示，不适合长期保存正式数据。
 
 长期使用建议优先部署到 Vercel，或自行配置 WebDAV 同步浏览器本地数据。
