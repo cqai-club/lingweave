@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { buildTopUpRequest, getTopUpCreditAmount, normalizeTopUpInfo, submitTopUpPayment } from "@/lib/top-up";
+import { buildTopUpRequest, getTopUpCreditAmount, isTrustedTopUpSuccessMessage, normalizeTopUpInfo, submitTopUpPayment, TOP_UP_SUCCESS_MESSAGE } from "@/lib/top-up";
 
 describe("充值配置", () => {
     it("解析 Account Service 返回的支付渠道和档位", () => {
@@ -51,6 +51,21 @@ describe("充值配置", () => {
         ]);
         expect(submittedForm?.isConnected).toBe(false);
         submitSpy.mockRestore();
+    });
+
+    it("只接受当前支付窗口从同源发回的到账消息", () => {
+        const paymentWindow = {} as Window;
+        const event = (overrides: Partial<Pick<MessageEvent, "data" | "origin" | "source">> = {}) => ({
+            data: TOP_UP_SUCCESS_MESSAGE,
+            origin: "https://app.example.com",
+            source: paymentWindow,
+            ...overrides,
+        });
+
+        expect(isTrustedTopUpSuccessMessage(event(), paymentWindow, "https://app.example.com")).toBe(true);
+        expect(isTrustedTopUpSuccessMessage(event({ origin: "https://evil.example.com" }), paymentWindow, "https://app.example.com")).toBe(false);
+        expect(isTrustedTopUpSuccessMessage(event({ source: {} as Window }), paymentWindow, "https://app.example.com")).toBe(false);
+        expect(isTrustedTopUpSuccessMessage(event({ data: "cqai:unknown" }), paymentWindow, "https://app.example.com")).toBe(false);
     });
 });
 

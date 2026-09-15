@@ -1,5 +1,7 @@
 import type { CreateTopUpRequest } from "@cqaiclub/account-client";
 
+export const TOP_UP_SUCCESS_MESSAGE = "cqai:top-up-success";
+
 type TopUpDisplayConfig = {
     quotaDisplayType?: string;
     quotaPerUnit?: number;
@@ -119,6 +121,10 @@ export function submitTopUpPayment(url: string, fields: Record<string, string> |
         paymentWindow.location.href = url;
     }
     return true;
+}
+
+export function isTrustedTopUpSuccessMessage(event: Pick<MessageEvent, "data" | "origin" | "source">, paymentWindow: Window | null, expectedOrigin: string) {
+    return Boolean(paymentWindow) && event.data === TOP_UP_SUCCESS_MESSAGE && event.origin === expectedOrigin && event.source === paymentWindow;
 }
 
 function emptyTopUpInfo(): TopUpInfo {

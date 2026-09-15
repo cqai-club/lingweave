@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Alert, Button, Spin } from "antd";
 import { ArrowLeft, CheckCircle2, Clock3, RefreshCw, WalletCards, XCircle } from "lucide-react";
 import { useLogto } from "@logto/react";
@@ -6,6 +6,7 @@ import { useNavigate } from "react-router-dom";
 
 import { ACCOUNT_SERVICE_ENABLED } from "@/constant/logto";
 import { formatAccountQuota, getAccountDisplayQuota } from "@/lib/account-quota";
+import { TOP_UP_SUCCESS_MESSAGE } from "@/lib/top-up";
 import { getAccountSummary, listTopUps } from "@/services/api/account";
 import type { AccountSummary } from "@cqaiclub/account-client";
 
@@ -19,6 +20,7 @@ type TopUpRecord = {
 const query = new URLSearchParams(window.location.search);
 const requestedOrderId = firstQueryValue(["cqai_order_id", "order_id", "orderId", "trade_no", "out_trade_no", "reference_id", "referenceId", "request_id"]);
 const returnedStatus = query.get("status") || "";
+const AUTO_CLOSE_SECONDS = 3;
 
 export default function BillingResultPage() {
     if (!ACCOUNT_SERVICE_ENABLED) return <ResultShell><Alert type="warning" showIcon message="当前部署未启用账号服务" /></ResultShell>;
@@ -33,6 +35,9 @@ function EnabledBillingResultPage() {
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
     const [error, setError] = useState("");
+    const [closeCountdown, setCloseCountdown] = useState(AUTO_CLOSE_SECONDS);
+    const [autoCloseFailed, setAutoCloseFailed] = useState(false);
+    const successNotifiedRef = useRef(false);
 
     async function refresh() {
         setRefreshing(true);
@@ -85,11 +90,48 @@ function EnabledBillingResultPage() {
         };
     }, [isAuthenticated]);
 
+    const state = order?.status === "success" ? "success" : order?.status === "failed" || order?.status === "expired" ? "failed" : returnedStatus === "cancelled" ? "cancelled" : "pending";
+
+    useEffect(() => {
+        if (state !== "success") return;
+        if (!successNotifiedRef.current) {
+            successNotifiedRef.current = true;
+            try {
+                window.opener?.postMessage(TOP_UP_SUCCESS_MESSAGE, window.location.origin);
+            } catch {
+                // The payment result page can still close when its opener is unavailable.
+            }
+        }
+
+        setAutoCloseFailed(false);
+        setCloseCountdown(AUTO_CLOSE_SECONDS);
+        let closeCheckTimer: number | undefined;
+        const countdownTimer = window.setInterval(() => setCloseCountdown((value) => Math.max(0, value - 1)), 1000);
+        const closeTimer = window.setTimeout(() => {
+            window.clearInterval(countdownTimer);
+            setCloseCountdown(0);
+            window.close();
+            closeCheckTimer = window.setTimeout(() => {
+                if (!window.closed) setAutoCloseFailed(true);
+            }, 250);
+        }, AUTO_CLOSE_SECONDS * 1000);
+
+        return () => {
+            window.clearInterval(countdownTimer);
+            window.clearTimeout(closeTimer);
+            if (closeCheckTimer !== undefined) window.clearTimeout(closeCheckTimer);
+        };
+    }, [state]);
+
     if (!isAuthenticated) return <ResultShell><Alert type="warning" showIcon message="请先登录后查看充值结果" /></ResultShell>;
 
-    const state = order?.status === "success" ? "success" : order?.status === "failed" || order?.status === "expired" ? "failed" : returnedStatus === "cancelled" ? "cancelled" : "pending";
     const stateCopy = {
-        success: { icon: <CheckCircle2 className="size-7" />, title: "充值已到账", description: "服务端已确认支付并完成钱包入账。", color: "emerald" },
+        success: {
+            icon: <CheckCircle2 className="size-7" />,
+            title: "充值已到账",
+            description: autoCloseFailed ? "浏览器未允许自动关闭，请手动关闭本页或返回 LingWeave。" : `服务端已确认支付并完成钱包入账，本页将在 ${closeCountdown} 秒后自动关闭。`,
+            color: "emerald",
+        },
         cancelled: { icon: <XCircle className="size-7" />, title: "支付未完成", description: "支付页面已取消或返回未完成，账户余额不会增加。", color: "amber" },
         failed: { icon: <XCircle className="size-7" />, title: "充值未完成", description: "订单没有完成入账，请重新发起充值或联系管理员。", color: "red" },
         pending: { icon: <Clock3 className="size-7" />, title: "正在确认支付结果", description: "支付平台回调可能需要一点时间，页面会自动刷新订单状态。", color: "amber" },
@@ -125,7 +167,11 @@ function EnabledBillingResultPage() {
                             </div>
                             <div className="flex flex-wrap gap-2 border-t border-stone-200 pt-5 dark:border-stone-800">
                                 <Button icon={<ArrowLeft className="size-4" />} onClick={() => navigate("/")}>返回 LingWeave</Button>
-                                <Button type="primary" icon={<RefreshCw className="size-4" />} loading={refreshing} onClick={() => void refresh()}>刷新订单和余额</Button>
+                                {state === "success" ? (
+                                    <Button type="primary" onClick={() => window.close()}>立即关闭</Button>
+                                ) : (
+                                    <Button type="primary" icon={<RefreshCw className="size-4" />} loading={refreshing} onClick={() => void refresh()}>刷新订单和余额</Button>
+                                )}
                             </div>
                         </>
                     )}
