@@ -462,7 +462,7 @@ async function requestStreamingResponse(config: AiConfig, body: Record<string, u
     const response = await requestTextProtocol(config, protocol, body, options);
     const useChatCompletions = protocol === "chat-completions";
     if (!response.ok) throw new Error(await readFetchError(response, "请求失败"));
-    await assertAiResponse(response, "请求失败");
+    await assertAiResponse(response, "请求失败", isAccountAiConfig(config));
     if (!response.body) {
         if (useChatCompletions) return parseChatCompletionPayload((await response.json()) as ChatCompletionPayload);
         const payload = (await response.json()) as ResponseApiPayload;
