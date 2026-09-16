@@ -107,4 +107,70 @@ describe("Account Service AI 请求", () => {
 
         await expect(requestAiBlob({ channelMode: "remote", baseUrl: "", apiKey: "" }, "/audio/speech")).rejects.toThrow("音频额度不足");
     });
+
+    it("账号接口返回 401 时通知登录状态失效", async () => {
+        vi.stubEnv("VITE_LOGTO_APP_ID", "lingweave-app");
+        vi.stubEnv("VITE_LOGTO_API_RESOURCE", "https://account.example.test");
+        vi.stubEnv("VITE_ACCOUNT_SERVICE_URL", "https://account.example.test");
+        vi.stubGlobal(
+            "fetch",
+            vi.fn().mockResolvedValue(
+                new Response(JSON.stringify({ success: false, code: "AUTH_TOKEN_INVALID", message: "Access token is invalid or expired" }), {
+                    status: 401,
+                    headers: { "Content-Type": "application/json" },
+                }),
+            ),
+        );
+        const { getAccountSummary, setAccountAccessTokenProvider, setAccountAuthFailureHandler } = await import("@/services/api/account");
+        const onAuthFailure = vi.fn();
+        setAccountAccessTokenProvider(() => "expired-logto-access-token");
+        setAccountAuthFailureHandler(onAuthFailure);
+
+        await expect(getAccountSummary()).rejects.toThrow("Access token is invalid or expired");
+        expect(onAuthFailure).toHaveBeenCalledOnce();
+    });
+
+    it("识别 HTTP 200 响应体中的登录失效信息", async () => {
+        vi.stubEnv("VITE_LOGTO_APP_ID", "lingweave-app");
+        vi.stubEnv("VITE_LOGTO_API_RESOURCE", "https://account.example.test");
+        vi.stubEnv("VITE_ACCOUNT_SERVICE_URL", "https://account.example.test");
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: false, code: "AUTH_TOKEN_INVALID", message: "登录已失效" }), { status: 200 })));
+        const { requestAiJson, setAccountAccessTokenProvider, setAccountAuthFailureHandler } = await import("@/services/api/account");
+        const onAuthFailure = vi.fn();
+        setAccountAccessTokenProvider(() => "expired-logto-access-token");
+        setAccountAuthFailureHandler(onAuthFailure);
+
+        await expect(requestAiJson({ channelMode: "remote", baseUrl: "", apiKey: "" }, "/models")).rejects.toThrow("请先登录 CQ AI Club");
+        expect(onAuthFailure).toHaveBeenCalledOnce();
+    });
+
+    it("权限不足不会被当作登录失效", async () => {
+        vi.stubEnv("VITE_LOGTO_APP_ID", "lingweave-app");
+        vi.stubEnv("VITE_LOGTO_API_RESOURCE", "https://account.example.test");
+        vi.stubEnv("VITE_ACCOUNT_SERVICE_URL", "https://account.example.test");
+        vi.stubGlobal(
+            "fetch",
+            vi.fn().mockResolvedValue(new Response(JSON.stringify({ success: false, code: "AUTH_SCOPE_FORBIDDEN", message: "缺少 ai:invoke 权限" }), { status: 403 })),
+        );
+        const { requestAiJson, setAccountAccessTokenProvider, setAccountAuthFailureHandler } = await import("@/services/api/account");
+        const onAuthFailure = vi.fn();
+        setAccountAccessTokenProvider(() => "valid-logto-access-token");
+        setAccountAuthFailureHandler(onAuthFailure);
+
+        await expect(requestAiJson({ channelMode: "remote", baseUrl: "", apiKey: "" }, "/models")).rejects.toThrow("缺少 ai:invoke 权限");
+        expect(onAuthFailure).not.toHaveBeenCalled();
+    });
+
+    it("本地渠道 API Key 失效不会退出 Logto", async () => {
+        vi.stubEnv("VITE_LOGTO_APP_ID", "lingweave-app");
+        vi.stubEnv("VITE_LOGTO_API_RESOURCE", "https://account.example.test");
+        vi.stubEnv("VITE_ACCOUNT_SERVICE_URL", "https://account.example.test");
+        vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ message: "API key is invalid" }), { status: 401 })));
+        const { requestAiJson, setAccountAuthFailureHandler } = await import("@/services/api/account");
+        const onAuthFailure = vi.fn();
+        setAccountAuthFailureHandler(onAuthFailure);
+
+        await expect(requestAiJson({ channelMode: "local", baseUrl: "https://ai.example.test", apiKey: "invalid-key" }, "/models")).rejects.toThrow("API key is invalid");
+        expect(onAuthFailure).not.toHaveBeenCalled();
+    });
 });
